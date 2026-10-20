@@ -30,6 +30,18 @@ This branch is laid out as an OpenFOAM (openfoam.com) plugin.
 - Custom location:
   `./Allwmake -prefix=user|group|openfoam|/some/path`
 
+## Layout
+
+Same as in OpenFOAM:
+
+| Directory | Contents |
+|-----------|----------|
+| `src/` | libraries (`src/Allwmake` builds them in dependency order) |
+| `applications/utilities/` | utilities |
+| `tutorials/` | tutorial cases |
+| `test/` | tests (not built by `Allwmake`) |
+| `bin/` | scripts and tools |
+
 When using this library in your research, please cite next articles:
 
 DOI: 10.1016/j.procs.2015.11.018 

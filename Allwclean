@@ -2,7 +2,7 @@
 cd "${0%/*}" || exit                            # Run from this directory
 #------------------------------------------------------------------------------
 
-wclean Sources/lib
-wclean cfdBEM/app/surfaceNoise
+wclean -all src
+wclean -all applications
 
 #------------------------------------------------------------------------------

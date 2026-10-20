@@ -1,0 +1,16 @@
+#!/bin/sh
+cd "${0%/*}" || exit                            # Run from this directory
+. "${WM_PROJECT_DIR:?}"/wmake/scripts/AllwmakeParseArguments
+#------------------------------------------------------------------------------
+
+# Sets FFTW_INC_DIR, FFTW_LIB_DIR for Make/options
+. "${WM_PROJECT_DIR:?}"/wmake/scripts/have_fftw
+if ! have_fftw
+then
+    echo "==> skip libAcoustics (no FFTW)"
+    exit 0
+fi
+
+wmake -all $targetType utilities
+
+#------------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 
 if [ $# -eq 0 ]
 then
-    PATH_TO_SCRIPT=$PWD/allCodeToOneFile
+    PATH_TO_SCRIPT="$0"
     THIS_DIR=$PWD
     OUT_FILE=$PWD/allCode
     export PATH_TOSCRIPT
