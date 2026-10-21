@@ -120,7 +120,8 @@ int main(int argc, char *argv[])
 
     Info<< "Reading data file..." << endl;
 
-    fileName pFileName = "pressureData/" + inputFileName;
+    // paths are relative to the case directory (-case option)
+    fileName pFileName = runTime.path()/"pressureData"/inputFileName;
 
     FileInterface reader(pFileName);
 
@@ -269,36 +270,35 @@ int main(int argc, char *argv[])
 
     Info<< "Write gmsh files..." << endl;
 
-    fileName outputDirectory = inputFileName.lessExt();    
+    fileName outputDirectory =
+        runTime.path()/"complexPressureData"/inputFileName.lessExt();
 
-    fileName controlFile = "complexPressureData/" + outputDirectory + "/" + "Spectrum.dat";
+    // directory must exist before the spectrum file is opened
+    mkDir(outputDirectory);
 
-    autoPtr<OFstream> controlFilePtr;
+    fileName spectrumFileName = outputDirectory/"Spectrum.dat";
 
-    if (!bool(controlFilePtr))
+    OFstream spectrumFile(spectrumFileName);
+
+    if (!spectrumFile.good())
     {
-        // Open new file at start up
-        controlFilePtr.reset
-        (
-            new OFstream
-            (
-                controlFile
-            )
-        );
+        FatalErrorInFunction
+            << "Cannot open file " << spectrumFileName << nl
+            << exit(FatalError);
     }
 
     forAll(freq, freqI)
     {
         word freqValue = name(freq[freqI]);
 
-        fileName freqDirectory = "complexPressureData/" + outputDirectory + "/" + freqValue;
+        fileName freqDirectory = outputDirectory/freqValue;
 
         mkDir(freqDirectory);
 
         //write data to msh file
         if (outputFormat == "gmsh")
         {
-            fileName dataFile = freqDirectory + "/nodeData.msh";
+            fileName dataFile = freqDirectory/"nodeData.msh";
 
             FileInterface outputFile(dataFile);
 
@@ -323,7 +323,7 @@ int main(int argc, char *argv[])
 
         Info << "Max abs: " << maxAbs << nl;
 
-        controlFilePtr() << freq[freqI] << ' ' << maxAbs << nl;
+        spectrumFile << freq[freqI] << ' ' << maxAbs << nl;
     }
 
     return 0;
