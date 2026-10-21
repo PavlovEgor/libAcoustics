@@ -192,8 +192,11 @@ Foam::scalar Foam::functionObjects::Farassat1AFormulation::observerAcousticPress
 
     forAll(qds_[iObs][iSurf], iFace)
     {
-        intDotQdS_[iObs] += valueAt(qds_, iObs, iSurf, iFace, ct1);
-        intFdS_[iObs] += valueAt(fds_, iObs, iSurf, iFace, ct1);
+        scalar q, f;
+        sourcesAt(iObs, iSurf, iFace, ct1, q, f);
+
+        intDotQdS_[iObs] += q;
+        intFdS_[iObs] += f;
     }
 
     reduce(intDotQdS_[iObs], sumOp<scalar>());

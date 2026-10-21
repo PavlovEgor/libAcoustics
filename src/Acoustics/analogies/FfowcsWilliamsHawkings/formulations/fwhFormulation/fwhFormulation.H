@@ -120,6 +120,25 @@ protected:
         //- Smallest delay to each observer, for the fixed response delay
         List<scalar> tauMin_;
 
+        //- Interval of the last sourcesAt() per observer, surface and face
+        List<List<labelList>> lastIndex_;
+
+
+    // Protected Member Functions
+
+        //- Thickness and loading sources at the time tau, the same as
+        //- valueAt() of qds and fds. One search for both, started from the
+        //- interval of the last call
+        void sourcesAt
+        (
+            label iObs,
+            label iSurf,
+            label iFace,
+            scalar tau,
+            scalar& q,
+            scalar& f
+        );
+
 
 private:
 

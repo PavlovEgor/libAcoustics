@@ -51,6 +51,7 @@ void Foam::functionObjects::fwhFormulation::initialize()
     // source histories and observer times
     qds_.resize(nObs);
     fds_.resize(nObs);
+    lastIndex_.resize(nObs);
     tobs_.resize(nObs);
     robs_.resize(nObs);
     magrobs_.resize(nObs);
@@ -59,6 +60,7 @@ void Foam::functionObjects::fwhFormulation::initialize()
     {
         qds_[iObs].resize(nSurf);
         fds_[iObs].resize(nSurf);
+        lastIndex_[iObs].resize(nSurf);
         tobs_[iObs].resize(nSurf);
         robs_[iObs].resize(nSurf);
         magrobs_[iObs].resize(nSurf);
@@ -69,6 +71,7 @@ void Foam::functionObjects::fwhFormulation::initialize()
 
             qds_[iObs][iSurf].resize(nFaces);
             fds_[iObs][iSurf].resize(nFaces);
+            lastIndex_[iObs][iSurf].resize(nFaces, 0);
             tobs_[iObs][iSurf].resize(nFaces, 0.0);
             robs_[iObs][iSurf].resize(nFaces);
             magrobs_[iObs][iSurf].resize(nFaces);
@@ -189,6 +192,73 @@ void Foam::functionObjects::fwhFormulation::calcNormals()
 }
 
 
+// * * * * * * * * * * * * Protected Member Functions  * * * * * * * * * * * //
+
+void Foam::functionObjects::fwhFormulation::sourcesAt
+(
+    label iObs,
+    label iSurf,
+    label iFace,
+    scalar tau,
+    scalar& q,
+    scalar& f
+)
+{
+    // qds and fds have the same times
+    const DynamicList<scalar>& t = qds_[iObs][iSurf][iFace].first();
+    const DynamicList<scalar>& qv = qds_[iObs][iSurf][iFace].second();
+    const DynamicList<scalar>& fv = fds_[iObs][iSurf][iFace].second();
+
+    const label n = t.size();
+
+    q = 0;
+    f = 0;
+
+    // zero outside of the history, exact values at its bounds
+    if (n < 1 || tau < t[0] || tau > t[n-1])
+    {
+        return;
+    }
+    if (tau == t[0])
+    {
+        q = qv[0];
+        f = fv[0];
+        return;
+    }
+    if (tau == t[n-1])
+    {
+        q = qv[n-1];
+        f = fv[n-1];
+        return;
+    }
+
+    // t[0] < tau < t[n-1]: interval t[li] <= tau < t[li+1] from the last one
+    label& li = lastIndex_[iObs][iSurf][iFace];
+    li = min(max(li, label(0)), n - 2);
+
+    while (t[li] > tau)
+    {
+        --li;
+    }
+    while (t[li+1] <= tau)
+    {
+        ++li;
+    }
+
+    if (tau == t[li])
+    {
+        q = qv[li];
+        f = fv[li];
+        return;
+    }
+
+    const label ui = li + 1;
+
+    q = qv[li] + ((qv[ui] - qv[li]) / (t[ui] - t[li])) * (tau - t[li]);
+    f = fv[li] + ((fv[ui] - fv[li]) / (t[ui] - t[li])) * (tau - t[li]);
+}
+
+
 // * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
 
 Foam::functionObjects::fwhFormulation::fwhFormulation
@@ -208,7 +278,8 @@ Foam::functionObjects::fwhFormulation::fwhFormulation
     rMax_(0),
     tauMax_(0),
     rMin_(0),
-    tauMin_(0)
+    tauMin_(0),
+    lastIndex_(0)
 {
     initialize();
 }
