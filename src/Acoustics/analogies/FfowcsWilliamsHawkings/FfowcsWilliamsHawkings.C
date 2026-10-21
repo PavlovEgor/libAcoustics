@@ -190,7 +190,7 @@ Foam::functionObjects::FfowcsWilliamsHawkings::surfaceVelocity
     const sampledSurface& surface
 ) const
 {
-    const volVectorField& U = obr_.lookupObject<volVectorField>("U");
+    const volVectorField& U = obr_.lookupObject<volVectorField>(UName_);
 
     return sampleOrInterpolate<vector>(U, surface);
 }
