@@ -36,6 +36,7 @@ Description
 
     Blank lines are skipped. A short last line (interrupted write) is
     dropped with a warning, any other line of wrong length is an error.
+    Times must be strictly ascending.
 
     Output is a gmsh $NodeData block, values are written as Re+Imj.
 

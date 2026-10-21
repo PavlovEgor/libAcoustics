@@ -194,6 +194,18 @@ void Foam::FileInterface::read
                 << exit(FatalError);
         }
 
+        // Overlapping or repeated times (e.g. joined restarted runs)
+        // would silently corrupt the interpolation
+        if (timeI > 0 && times[timeI] <= times[timeI-1])
+        {
+            FatalErrorInFunction
+                << "Time " << times[timeI] << " at line " << lineI
+                << " of " << name_ << " is not greater than the previous "
+                << times[timeI-1] << nl
+                << "Sampled times must be strictly ascending" << nl
+                << exit(FatalError);
+        }
+
         ++timeI;
     }
 
