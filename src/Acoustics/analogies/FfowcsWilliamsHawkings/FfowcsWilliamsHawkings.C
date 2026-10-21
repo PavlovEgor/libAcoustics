@@ -109,6 +109,9 @@ void Foam::functionObjects::FfowcsWilliamsHawkings::correct()
         if (nonUniformSurfaceMotion_)
         {
             vS_[iSurf] = (controlSurfaces_[iSurf].Cf() - Cf0_[iSurf])/dt;
+
+            // positions for the next time step, also at every probe step
+            Cf0_[iSurf] = controlSurfaces_[iSurf].Cf();
         }
         else
         {
