@@ -185,18 +185,15 @@ Foam::scalar Foam::functionObjects::GTFormulation::observerAcousticPressure
     // slightly increase time to get inside of time step
     const scalar ct1 = ct + fwh_.time().deltaTValue()*1.0e-6;
 
-    // acoustic pressure of all surfaces,
+    // acoustic pressure of the surface iSurf,
     // zero if the source didn't reach the observer
     intDotQdS_[iObs] = 0.0;
     intFdS_[iObs] = 0.0;
 
-    forAll(qds_[iObs], surfI)
+    forAll(qds_[iObs][iSurf], iFace)
     {
-        forAll(qds_[iObs][surfI], iFace)
-        {
-            intDotQdS_[iObs] += valueAt(qds_, iObs, surfI, iFace, ct1);
-            intFdS_[iObs] += valueAt(fds_, iObs, surfI, iFace, ct1);
-        }
+        intDotQdS_[iObs] += valueAt(qds_, iObs, iSurf, iFace, ct1);
+        intFdS_[iObs] += valueAt(fds_, iObs, iSurf, iFace, ct1);
     }
 
     reduce(intDotQdS_[iObs], sumOp<scalar>());
