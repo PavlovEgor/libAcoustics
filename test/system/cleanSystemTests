@@ -5,6 +5,9 @@ cd testMonopole3D/
 cd ../testDipole3D/
 ./Allclean
 
+cd ../testSurfaceNoise/
+./Allclean
+
 cd ../
 
 #
