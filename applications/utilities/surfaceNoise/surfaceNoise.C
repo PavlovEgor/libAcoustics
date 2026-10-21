@@ -36,7 +36,7 @@ Description
 
     \verbatim
 
-    outputFormat    gmsh; //optionally
+    outputFormat    gmsh; // optionally: gmsh (default), none (Spectrum.dat only)
 
     inputFileName   "fileName.txt";
 
@@ -289,15 +289,13 @@ int main(int argc, char *argv[])
 
     forAll(freq, freqI)
     {
-        word freqValue = name(freq[freqI]);
-
-        fileName freqDirectory = outputDirectory/freqValue;
-
-        mkDir(freqDirectory);
-
         //write data to msh file
         if (outputFormat == "gmsh")
         {
+            fileName freqDirectory = outputDirectory/name(freq[freqI]);
+
+            mkDir(freqDirectory);
+
             fileName dataFile = freqDirectory/"nodeData.msh";
 
             FileInterface outputFile(dataFile);

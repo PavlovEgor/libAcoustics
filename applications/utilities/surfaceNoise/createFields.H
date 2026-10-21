@@ -8,8 +8,16 @@
     // upper frequency of frequency band
     scalar maxFreq = dict.lookupOrDefault("maxFrequency", 10000.0);
 
-    // output format
-    word outputFormat = dict.lookupOrDefault<word>("outputFormat", "gmsh");
+    // output format of complex amplitudes: gmsh, none (Spectrum.dat only)
+    word outputFormat = dict.getOrDefault<word>("outputFormat", "gmsh");
+
+    if (outputFormat != "gmsh" && outputFormat != "none")
+    {
+        FatalIOErrorInFunction(dict)
+            << "Unknown outputFormat " << outputFormat << nl
+            << "Valid formats: gmsh none" << nl
+            << exit(FatalIOError);
+    }
 
     // output directory (similar with surface name)
     fileName inputFileName = dict.get<word>("inputFileName");
