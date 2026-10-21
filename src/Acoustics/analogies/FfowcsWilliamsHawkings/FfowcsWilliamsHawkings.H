@@ -2,8 +2,10 @@
   =========                 |
   \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
    \\    /   O peration     |
-    \\  /    A nd           | Copyright (C) 2011-2013 OpenFOAM Foundation
+    \\  /    A nd           | www.openfoam.com
      \\/     M anipulation  |
+-------------------------------------------------------------------------------
+    Copyright (C) 2011-2013 OpenFOAM Foundation
 -------------------------------------------------------------------------------
 License
     This file is part of OpenFOAM.
@@ -22,19 +24,56 @@ License
     along with OpenFOAM.  If not, see <http://www.gnu.org/licenses/>.
 
 Class
-    Foam::FfowcsWilliamsHawkings
+    Foam::functionObjects::FfowcsWilliamsHawkings
 
 Group
     grpFfowcsWilliamsHawkingsFunctionObjects
 
 Description
+    Ffowcs Williams - Hawkings acoustic analogy: acoustic pressure of the
+    observers from the flow on the control surfaces.
 
+    The acoustic pressure is the sum of the contributions of all control
+    surfaces, so the surfaces are parts of one integration surface.
 
-SeeAlso
+    \verbatim
+    fwh
+    {
+        type                FfowcsWilliamsHawkings;
+        libs                ("libAcoustics.so");
 
+        // AcousticAnalogy settings: timeStart, c0, observers, ...
+
+        patches             ();
+        formulationType     Farassat1AFormulation;  // or GTFormulation
+        interpolationScheme cellPoint;
+        pInf                0;
+        U0                  (0 0 0);    // optional, uniform flow for GT
+        Ufwh                (0 0 0);    // optional, surface velocity
+        nonUniformSurfaceMotion false;  // optional
+        fixedResponseDelay  false;      // optional
+        responseDelay       0.0001;     // optional, with fixedResponseDelay
+        cleanFreq           100;        // optional
+
+        surfaces
+        (
+            sphere
+            {
+                type            patch;
+                patches         (sphere);
+                interpolate     false;
+            }
+        );
+    }
+    \endverbatim
 
 SourceFiles
+    FfowcsWilliamsHawkings.C
+    FfowcsWilliamsHawkingsTemplates.C
 
+SeeAlso
+    Foam::functionObjects::AcousticAnalogy
+    Foam::functionObjects::fwhFormulation
 
 \*---------------------------------------------------------------------------*/
 
@@ -43,201 +82,97 @@ SourceFiles
 
 #include "AcousticAnalogy.H"
 #include "sampledSurface.H"
-#include "surfaceWriter.H"
-#include "surfaceFieldsFwd.H"
-#include "sampledPatch.H"
-#include "fwhFormulation.H"
+#include "volFieldsFwd.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 namespace Foam
 {
-
 namespace functionObjects
 {
 
+// Forward Declarations
 class fwhFormulation;
-class Farassat1AFormulation;
-class GTFormulation;
-
 
 /*---------------------------------------------------------------------------*\
-                           Class FfowcsWilliamsHawkings Declaration
+                   Class FfowcsWilliamsHawkings Declaration
 \*---------------------------------------------------------------------------*/
 
 class FfowcsWilliamsHawkings
 :
     public AcousticAnalogy
 {
-//friends declation
+    // Private Data
 
-private:
-
-    friend class fwhFormulation;
-    friend class Farassat1AFormulation;
-    friend class GTFormulation;
-    friend class fvmInterpolationFormulation;
-
-protected:
-
-    friend class fwhFormulation;
-    friend class Farassat1AFormulation;
-    friend class GTFormulation;
-    friend class fvmInterpolationFormulation;
-
-private:
-
-    //- Class used for surface merging information
-    class mergeInfo
-    {
-    public:
-
-        pointField points;
-        faceList   faces;
-        labelList  pointsMap;
-
-        //- Clear all storage
-        void clear()
-        {
-            points.clear();
-            faces.clear();
-            pointsMap.clear();
-        }
-    };
-
-    //- Tolerance for merging points (fraction of mesh bounding box)
-    static scalar mergeTol_;
-
-    //types for internal usage
-
-    typedef Pair<List<scalar> > pointTimeData;
-
-    typedef List<List<List<pointTimeData > > > surfaceTimeData;
-
-
-private:
-
-        //-
+        //- Name of the FW-H formulation
         word formulationType_;
 
-        //-
+        //- Fixed delay of the response
         Switch fixedResponseDelay_;
 
-        //-
+        //- Response delay with the fixed delay
         scalar responseDelay_;
 
-        //-
+        //- Velocity of the control surfaces
         vector Ufwh_;
 
-        //Wind Tunnel Velocity Vector for GTFormulation
-        //U0 = (0 0 0) for 1AFormulation
+        //- Uniform flow velocity, e.g. a wind tunnel, for GTFormulation
         vector U0_;
 
-        //-
+        //- Surfaces move with the mesh
         bool nonUniformSurfaceMotion_;
 
-        //-
+        //- Face centres at the previous time step, for the moving surfaces
         List<vectorField> Cf0_;
 
-        //-
+        //- Face velocities of the control surfaces
         List<vectorField> vS_;
 
-        //- undisturbed pressure, in Pa
+        //- Undisturbed pressure, in Pa
         scalar pInf_;
 
-        //-
+        //- FW-H formulation
         autoPtr<fwhFormulation> fwhFormulationPtr_;
 
-        //
+        //- Time steps between cleaning of the expired sources
         label cleanFreq_;
 
         //- Interpolation scheme to use for sampling
         word interpolationScheme_;
 
-        //- surfaces for sampling
+        //- Control surfaces
         PtrList<sampledSurface> controlSurfaces_;
 
-        //- Information for merging surfaces
-        List<mergeInfo> mergeList_;
 
 protected:
 
-        class sampledPatchAccess : public sampledPatch
-        {
-        public:
+    // Protected Member Functions
 
-            //-
-            sampledPatchAccess(const sampledPatch& sp)
-            :
-                sampledPatch
-                (
-                    sp
-                )
-            {
-            };
+        //- Compute and append the acoustic pressure of the observers
+        virtual void correct();
 
-            ~sampledPatchAccess()
-            {
-            };
+        //- Update the moving surfaces at the time steps between probes
+        virtual void updateSurfaceCf();
 
-            //-
-            const labelList& aPatchIDs() const
-            {
-                return patchIDs();
-            };
-
-            //-
-            const labelList& aPatchStart() const
-            {
-                return patchStart();
-            };
-
-            //-
-            const labelList& aPatchFaceLabels() const
-            {
-                return patchFaceLabels();
-            };
-        };
-
-protected:
-
-        //- Disallow default bitwise copy construct
-        FfowcsWilliamsHawkings(const FfowcsWilliamsHawkings&);
-
-        //- Disallow default bitwise assignment
-        void operator=(const FfowcsWilliamsHawkings&);
-
-        //-
-        void correct();
-        
-        //-
-        void updateSurfaceCf();
-
-        //- Sample and write a particular volume field
+        //- Sample or interpolate a volume field on the surface
         template<class Type>
-        tmp<Field<Type> > sampleOrInterpolate
+        tmp<Field<Type>> sampleOrInterpolate
         (
             const GeometricField<Type, fvPatchField, volMesh>&,
             const sampledSurface& surface
         ) const;
 
-        //- Returns sampled density field
+        //- Sampled density
         tmp<scalarField> surfaceDensity(const sampledSurface& surface) const;
 
-        //- Returns sampled velocity field
+        //- Sampled velocity
         tmp<vectorField> surfaceVelocity(const sampledSurface& surface) const;
 
-        //- Returns sampled pressure field
+        //- Sampled pressure
         tmp<scalarField> surfacePressure(const sampledSurface& surface) const;
 
-        //
-        tmp<vectorField> surfaceStressDivergence(const sampledSurface& surface) const;
-
-        //-
+        //- Allocate the surface data and select the formulation
         void initialize();
-
-        //- Not needed at current time
-        //bool signalReachedObserver(const surfaceTimeData& data, label iObs);
 
 
 public:
@@ -264,32 +199,87 @@ public:
             const dictionary&
         );
 
+        //- No copy construct
+        FfowcsWilliamsHawkings(const FfowcsWilliamsHawkings&) = delete;
+
+        //- No copy assignment
+        void operator=(const FfowcsWilliamsHawkings&) = delete;
+
+
     //- Destructor
     virtual ~FfowcsWilliamsHawkings();
 
 
     // Member Functions
-        PtrList<sampledSurface>& getSampledSurface();
-        
+
+        // Access
+
+            //- Control surfaces
+            const PtrList<sampledSurface>& controlSurfaces() const noexcept
+            {
+                return controlSurfaces_;
+            }
+
+            //- Control surfaces
+            PtrList<sampledSurface>& getSampledSurface() noexcept
+            {
+                return controlSurfaces_;
+            }
+
+            //- Face velocities of the control surfaces
+            const List<vectorField>& surfaceVelocities() const noexcept
+            {
+                return vS_;
+            }
+
+            //- Velocity of the control surfaces
+            const vector& Ufwh() const noexcept
+            {
+                return Ufwh_;
+            }
+
+            //- Uniform flow velocity
+            const vector& U0() const noexcept
+            {
+                return U0_;
+            }
+
+            //- Surfaces move with the mesh
+            bool nonUniformSurfaceMotion() const noexcept
+            {
+                return nonUniformSurfaceMotion_;
+            }
+
+            //- Fixed delay of the response
+            bool fixedResponseDelay() const noexcept
+            {
+                return fixedResponseDelay_;
+            }
+
+            //- Response delay with the fixed delay
+            scalar responseDelay() const noexcept
+            {
+                return responseDelay_;
+            }
+
+            //- Time steps between cleaning of the expired sources
+            label cleanFreq() const noexcept
+            {
+                return cleanFreq_;
+            }
+
+
         //- Read the FfowcsWilliamsHawkings data
         virtual bool read(const dictionary&);
 
-        //-
-        virtual bool execute();
-
-        //- Write the FfowcsWilliamsHawkings
-        virtual bool write();
-
         //- Mark the control surfaces as needing an update.
-        //  The function is copy-pasted from sampledSurfaces.C
-        //  May also free up unneeded data.
         //  Return false if all surfaces were already marked as expired.
         virtual bool expire();
 
-        //-
-        virtual bool needsUpdate() const; 
+        //- True if any control surface needs an update
+        virtual bool needsUpdate() const;
 
-        //-
+        //- Update the control surfaces, true if any was updated
         virtual bool update();
 };
 
@@ -297,12 +287,15 @@ public:
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 } // End namespace functionObjects
-
 } // End namespace Foam
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-#include "FWHTemplates.C"
+#ifdef NoRepository
+    #include "FfowcsWilliamsHawkingsTemplates.C"
+#endif
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 #endif
 

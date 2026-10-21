@@ -2,8 +2,10 @@
   =========                 |
   \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
    \\    /   O peration     |
-    \\  /    A nd           | Copyright (C) 2011-2013 OpenFOAM Foundation
+    \\  /    A nd           | www.openfoam.com
      \\/     M anipulation  |
+-------------------------------------------------------------------------------
+    Copyright (C) 2011-2013 OpenFOAM Foundation
 -------------------------------------------------------------------------------
 License
     This file is part of OpenFOAM.
@@ -24,23 +26,22 @@ License
 \*---------------------------------------------------------------------------*/
 
 #include "volFields.H"
-#include "surfaceFields.H"
-#include "ListListOps.H"
-#include "stringListOps.H"
+#include "interpolation.H"
 
-// * * * * * * * * * * * * * Private Member Functions  * * * * * * * * * * * //
+// * * * * * * * * * * * * Protected Member Functions  * * * * * * * * * * * //
 
 template<class Type>
-Foam::tmp<Foam::Field<Type> > Foam::functionObjects::FfowcsWilliamsHawkings::sampleOrInterpolate
+Foam::tmp<Foam::Field<Type>>
+Foam::functionObjects::FfowcsWilliamsHawkings::sampleOrInterpolate
 (
-    const GeometricField<Type, fvPatchField, volMesh>& vField, 
+    const GeometricField<Type, fvPatchField, volMesh>& vField,
     const sampledSurface& surface
 ) const
 {
     // interpolator for this field
-    autoPtr<interpolation<Type> > interpolatorPtr;
+    autoPtr<interpolation<Type>> interpolatorPtr;
 
-    tmp<Field<Type> > values;
+    tmp<Field<Type>> values;
 
     if (surface.interpolate())
     {

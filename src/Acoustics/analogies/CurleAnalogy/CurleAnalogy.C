@@ -2,8 +2,10 @@
   =========                 |
   \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
    \\    /   O peration     |
-    \\  /    A nd           | Copyright (C) 2011-2015 OpenFOAM Foundation
+    \\  /    A nd           | www.openfoam.com
      \\/     M anipulation  |
+-------------------------------------------------------------------------------
+    Copyright (C) 2011-2015 OpenFOAM Foundation
 -------------------------------------------------------------------------------
 License
     This file is part of OpenFOAM.
@@ -25,8 +27,7 @@ License
 
 #include "CurleAnalogy.H"
 #include "volFields.H"
-#include "Time.H"
-#include "IFstream.H"
+#include "mathematicalConstants.H"
 #include "addToRunTimeSelectionTable.H"
 
 // * * * * * * * * * * * * * * Static Data Members * * * * * * * * * * * * * //
@@ -40,9 +41,6 @@ namespace functionObjects
     addToRunTimeSelectionTable(functionObject, CurleAnalogy, dictionary);
 }
 }
-
-
-// * * * * * * * * * * * * Protected Member Functions  * * * * * * * * * * * //
 
 
 // * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
@@ -87,11 +85,6 @@ Foam::functionObjects::CurleAnalogy::CurleAnalogy
     F_.resize(1);
 }
 
-// * * * * * * * * * * * * * * * * Destructor  * * * * * * * * * * * * * * * //
-
-Foam::functionObjects::CurleAnalogy::~CurleAnalogy()
-{}
-
 // * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
 
 bool Foam::functionObjects::CurleAnalogy::read(const dictionary& dict)
@@ -120,22 +113,6 @@ void Foam::functionObjects::CurleAnalogy::calcDistances()
     }
     reduce (ni, sumOp<scalar>());
     c_ = gSum(ci) / ni;
-}
-
-bool Foam::functionObjects::CurleAnalogy::execute()
-{
-    return true;
-}
-
-bool Foam::functionObjects::CurleAnalogy::write()
-{
-    //use forces library to calculate forces acting on patch
-    if (!AcousticAnalogy::write())
-    {
-        return false;
-    }
-
-    return true;
 }
 
 void Foam::functionObjects::CurleAnalogy::correct()

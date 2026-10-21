@@ -2,8 +2,10 @@
   =========                 |
   \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
    \\    /   O peration     |
-    \\  /    A nd           | Copyright (C) 2011-2013 OpenFOAM Foundation
+    \\  /    A nd           | www.openfoam.com
      \\/     M anipulation  |
+-------------------------------------------------------------------------------
+    Copyright (C) 2011-2013 OpenFOAM Foundation
 -------------------------------------------------------------------------------
 License
     This file is part of OpenFOAM.
@@ -22,19 +24,32 @@ License
     along with OpenFOAM.  If not, see <http://www.gnu.org/licenses/>.
 
 Class
-    Foam::Curle
+    Foam::functionObjects::CurleAnalogy
 
 Group
     grpCurleFunctionObjects
 
 Description
+    Curle acoustic analogy: acoustic pressure of the observers from the
+    force acting on the patches, compact dipole source at the patch centre.
 
+    \verbatim
+    curle
+    {
+        type            CurleAnalogy;
+        libs            ("libAcoustics.so");
 
-SeeAlso
+        // AcousticAnalogy settings: timeStart, c0, observers, ...
 
+        patches         (cylinder);
+    }
+    \endverbatim
 
 SourceFiles
+    CurleAnalogy.C
 
+SeeAlso
+    Foam::functionObjects::AcousticAnalogy
 
 \*---------------------------------------------------------------------------*/
 
@@ -43,43 +58,39 @@ SourceFiles
 
 #include "AcousticAnalogy.H"
 
-
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 namespace Foam
 {
-
 namespace functionObjects
 {
 
 /*---------------------------------------------------------------------------*\
-                           Class CurleAnalogy Declaration
+                        Class CurleAnalogy Declaration
 \*---------------------------------------------------------------------------*/
 
 class CurleAnalogy
 :
     public AcousticAnalogy
 {
+    // Private Data
 
-        //- Center of surface for sampling
+        //- Centre of the patches
         vector c_;
 
-        //- Force acting on patch
+        //- Force acting on the patches
         tdPrimitive<vector> F_;
+
 
 protected:
 
-        //- Disallow default bitwise copy construct
-        CurleAnalogy(const CurleAnalogy&);
+    // Protected Member Functions
 
-        //- Disallow default bitwise assignment
-        void operator=(const CurleAnalogy&);
-
-        //-
+        //- Centre of the patches
         void calcDistances();
 
-        //-
-        void correct();
+        //- Compute and append the acoustic pressure of the observers
+        virtual void correct();
 
 
 public:
@@ -106,28 +117,27 @@ public:
             const dictionary&
         );
 
+        //- No copy construct
+        CurleAnalogy(const CurleAnalogy&) = delete;
+
+        //- No copy assignment
+        void operator=(const CurleAnalogy&) = delete;
+
+
     //- Destructor
-    virtual ~CurleAnalogy();
+    virtual ~CurleAnalogy() = default;
 
 
     // Member Functions
 
         //- Read the CurleAnalogy data
         virtual bool read(const dictionary&);
-
-        //-
-        virtual bool execute();
-
-        //- Write the CurleAnalogy
-        virtual bool write();
-
 };
 
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 } // End namespace functionObjects
-
 } // End namespace Foam
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //

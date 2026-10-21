@@ -10,9 +10,9 @@ Interpolator/cubicSpline/cubicSplineInterpolator.C
 /* Acoustic analogies */
 analogies/AcousticAnalogy/AcousticAnalogy.C
 analogies/CurleAnalogy/CurleAnalogy.C
-analogies/FfowcsWilliamsHawkings/fwhFormulation.C
-analogies/FfowcsWilliamsHawkings/Farassat1AFormulation.C
-analogies/FfowcsWilliamsHawkings/GTFormulation.C
+analogies/FfowcsWilliamsHawkings/formulations/fwhFormulation/fwhFormulation.C
+analogies/FfowcsWilliamsHawkings/formulations/Farassat1A/Farassat1AFormulation.C
+analogies/FfowcsWilliamsHawkings/formulations/GT/GTFormulation.C
 analogies/FfowcsWilliamsHawkings/FfowcsWilliamsHawkings.C
 
 /* Coupling with BEM and FFT */

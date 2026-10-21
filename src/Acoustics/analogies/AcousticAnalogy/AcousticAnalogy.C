@@ -1,9 +1,31 @@
-#include "AcousticAnalogy.H"
+/*---------------------------------------------------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     |
+    \\  /    A nd           | www.openfoam.com
+     \\/     M anipulation  |
+-------------------------------------------------------------------------------
+License
+    This file is part of OpenFOAM.
 
+    OpenFOAM is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    OpenFOAM is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with OpenFOAM.  If not, see <http://www.gnu.org/licenses/>.
+
+\*---------------------------------------------------------------------------*/
+
+#include "AcousticAnalogy.H"
 #include "volFields.H"
 #include "Time.H"
-#include "IFstream.H"
-#include "addToRunTimeSelectionTable.H"
 #include "Interpolator.H"
 
 // * * * * * * * * * * * * * * Static Data Members * * * * * * * * * * * * * //
@@ -13,7 +35,6 @@ namespace Foam
 namespace functionObjects
 {
     defineTypeNameAndDebug(AcousticAnalogy, 0);
-//    addToRunTimeSelectionTable(functionObject, AcousticAnalogy, dictionary);
 }
 }
 
@@ -66,9 +87,6 @@ Foam::functionObjects::AcousticAnalogy::AcousticAnalogy
     probeI_(0)
 {
 }
-
-Foam::functionObjects::AcousticAnalogy::~AcousticAnalogy()
-{}
 
 void Foam::functionObjects::AcousticAnalogy::makeFile()
 {
@@ -167,14 +185,6 @@ void Foam::functionObjects::AcousticAnalogy::writeFft()
     }
 }
 
-void Foam::functionObjects::AcousticAnalogy::correct()
-{
-}
-
-void Foam::functionObjects::AcousticAnalogy::updateSurfaceCf()
-{
-}
-
 bool Foam::functionObjects::AcousticAnalogy::read(const dictionary& dict)
 {
     if (!forces::read(dict))
@@ -183,11 +193,11 @@ bool Foam::functionObjects::AcousticAnalogy::read(const dictionary& dict)
     }
     Info << "Reading analogy settings" << endl;
 
-    probeFreq_ = dict.lookupOrDefault("probeFrequency",1);
+    probeFreq_ = dict.getOrDefault<label>("probeFrequency", 1);
 
-    dict.lookup("timeStart") >> timeStart_;
+    dict.readEntry("timeStart", timeStart_);
 
-    dict.lookup("timeEnd") >> timeEnd_;
+    dict.readEntry("timeEnd", timeEnd_);
 
     writeFft_ = dict.getOrDefault("writeFft", false);
 
@@ -205,10 +215,10 @@ bool Foam::functionObjects::AcousticAnalogy::read(const dictionary& dict)
         ) << exit(FatalIOError);
     }
 
-    dict.lookup("c0") >> c0_;
+    dict.readEntry("c0", c0_);
 
     //Ask for rhoRef again, because libforces sometimes do not
-    dict.lookup("rhoInf") >> rhoRef_;
+    dict.readEntry("rhoInf", rhoRef_);
 
     //read observers
     {
@@ -310,6 +320,4 @@ bool Foam::functionObjects::AcousticAnalogy::write()
     return true;
 }
 
-//
-//END-OF-FILE
-//
+// ************************************************************************* //
