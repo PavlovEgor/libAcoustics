@@ -162,14 +162,41 @@ int main(int argc, char *argv[])
     // sampled signal duration (sampling may start at non-zero time)
     scalar lastTime = tSampled[sampledTimePoints-1] - tSampled[0];
 
+    if (lastTime <= 0)
+    {
+        FatalErrorInFunction
+            << "Sampled times must be ascending, got duration " << lastTime
+            << exit(FatalError);
+    }
+
     //------------------------
-    //calculate the interpolation time interval
+    // uniform grid for FFT with the mean sampled time step: resampling
+    // keeps the sampled content, frequencies above maxFreq are dropped
+    // from the spectrum instead of being aliased into it
 
     Info << "Prepare to fft..." << endl;
 
-    label nFftTimePoints = label(2*maxFreq*lastTime); //2*... because spectrum is symmetric
-    scalar deltaIntT = lastTime / (scalar(nFftTimePoints) );
-    label freqPoints = ceil(0.5*scalar(nFftTimePoints)) + 1;
+    label nFftTimePoints = sampledTimePoints - 1;
+    scalar deltaIntT = lastTime/scalar(nFftTimePoints);
+
+    // frequencies i/lastTime up to maxFreq, but not above the Nyquist one
+    label freqPoints = label(maxFreq*lastTime) + 1;
+    const label nyquistPoints = nFftTimePoints/2 + 1;
+
+    if (freqPoints > nyquistPoints)
+    {
+        WarningInFunction
+            << "maxFrequency " << maxFreq
+            << " is above the Nyquist frequency " << 0.5/deltaIntT
+            << " of the sampled data, spectrum is truncated" << endl;
+
+        freqPoints = nyquistPoints;
+    }
+
+    Info<< "    FFT points: " << nFftTimePoints
+        << ", time step: " << deltaIntT
+        << ", frequency step: " << 1/lastTime
+        << ", frequencies: " << freqPoints << endl;
 
     labelList intLower(nFftTimePoints);
     scalarList intWeight(nFftTimePoints);
