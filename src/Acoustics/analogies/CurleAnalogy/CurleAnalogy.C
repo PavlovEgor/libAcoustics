@@ -104,14 +104,15 @@ void Foam::functionObjects::CurleAnalogy::calcDistances()
     const fvMesh& mesh = refCast<const fvMesh>(obr_);
 
     vectorField ci(0);
-    scalar ni = 0;
 
     for (const label patchi : patchIDs_)
     {
         ci.append(mesh.boundary()[patchi].Cf());
-        ni += scalar(ci.size());
     }
-    reduce (ni, sumOp<scalar>());
+
+    // mean face centre of all patches
+    scalar ni = scalar(ci.size());
+    reduce(ni, sumOp<scalar>());
     c_ = gSum(ci) / ni;
 }
 
