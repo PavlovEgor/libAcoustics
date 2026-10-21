@@ -120,6 +120,12 @@ void Foam::functionObjects::CurleAnalogy::calcDistances()
 
 void Foam::functionObjects::CurleAnalogy::correct()
 {
+    // the source moves with the patches
+    if (refCast<const fvMesh>(obr_).moving())
+    {
+        calcDistances();
+    }
+
     calcForcesMoments();
 
     F_.value(0) = forceEff();
