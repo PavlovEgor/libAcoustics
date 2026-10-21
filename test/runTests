@@ -69,6 +69,16 @@ else
     errors=`expr $errors + 1`
     echo $'===== testDipoleSource		FAILED =====\n' >> ../../summary.log
 fi
+cd ../../integration/testAnalogies/
+testAnalogies >> ../../total.log 2>&1
+rc=$?
+if [ "$rc" = "0" ]
+then
+    echo $'===== testAnalogies		OK =====\n' >> ../../summary.log
+else
+    errors=`expr $errors + 1`
+    echo $'===== testAnalogies		FAILED =====\n' >> ../../summary.log
+fi
 cd ../../
 if [ $errors -eq 0 ]; then
     echo $errors > successful.txt

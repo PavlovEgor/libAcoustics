@@ -8,6 +8,9 @@ wmake
 cd ../testDipoleSource/
 wmake
 
+cd ../testAnalogies/
+wmake
+
 cd ../
 
 #

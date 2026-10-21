@@ -14,6 +14,12 @@ wclean
 rm -rf acousticData/
 rm -rf utils/
 
+cd ../testAnalogies/
+wclean
+rm -rf acousticData/
+rm -rf postProcessing/
+rm -rf utils/
+
 cd ../
 
 #

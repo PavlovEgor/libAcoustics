@@ -8,6 +8,9 @@ testMonopoleSource
 cd ../testDipoleSource/
 testDipoleSource
 
+cd ../testAnalogies/
+testAnalogies
+
 cd ../
 
 #
