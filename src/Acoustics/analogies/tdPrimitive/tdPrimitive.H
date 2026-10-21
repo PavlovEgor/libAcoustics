@@ -28,8 +28,9 @@ Description
     List of values with the time derivative.
 
     The derivative of each value is computed from its previous values:
-    the first order difference for the first step or with the variable
-    time step, otherwise the second order backward difference.
+    zero at the first step, then the first order difference for the second
+    step or with the variable time step, otherwise the second order backward
+    difference.
 
     Usage per time step: set value(i), then call dot(t, i) once.
 
@@ -149,9 +150,9 @@ public:
 
             if (old_.size() <= idx)
             {
+                // no previous value: zero derivative
                 old_.resize(idx+1);
                 old_[idx] = new_[idx];
-                dvdt = new_[idx] / deltat_;
             }
             else if ((oldOld_.size() <= idx) || varTimeStep_)
             {
