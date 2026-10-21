@@ -72,6 +72,32 @@ using namespace Foam;
 
 
 
+// largest size <= n with prime factors 2, 3, 5, 7 only: FFTW is up to ten
+// times faster for such sizes than for sizes with large prime factors
+label fftSize(label n)
+{
+    for (; n > 1; --n)
+    {
+        label m = n;
+
+        for (const label p : {2, 3, 5, 7})
+        {
+            while (m % p == 0)
+            {
+                m /= p;
+            }
+        }
+
+        if (m == 1)
+        {
+            break;
+        }
+    }
+
+    return n;
+}
+
+
 // linear interpolation from ascending tSampled to the uniform grid t0 + j*dt:
 // value[j] = data[lower[j]] + weight[j]*(data[lower[j]+1] - data[lower[j]]);
 // the grid is the same for all surface points, so weights are computed once
@@ -145,8 +171,22 @@ int main(int argc, char *argv[])
             << sampledTimePoints << exit(FatalError);
     }
 
-    // sampled signal duration (sampling may start at non-zero time)
-    scalar lastTime = tSampled[sampledTimePoints-1] - tSampled[0];
+    //------------------------
+    // uniform grid for FFT with the mean sampled time step: resampling
+    // keeps the sampled content, frequencies above maxFreq are dropped
+    // from the spectrum instead of being aliased into it.
+    // FFT size is reduced to small prime factors by dropping the first
+    // samples, so for the constant time step the grid stays on the samples
+
+    Info << "Prepare to fft..." << endl;
+
+    label nFftTimePoints = fftSize(sampledTimePoints - 1);
+    label startI = sampledTimePoints - 1 - nFftTimePoints;
+
+    scalar startTime = tSampled[startI];
+
+    // duration of the analysed signal
+    scalar lastTime = tSampled[sampledTimePoints-1] - startTime;
 
     if (lastTime <= 0)
     {
@@ -155,14 +195,15 @@ int main(int argc, char *argv[])
             << exit(FatalError);
     }
 
-    //------------------------
-    // uniform grid for FFT with the mean sampled time step: resampling
-    // keeps the sampled content, frequencies above maxFreq are dropped
-    // from the spectrum instead of being aliased into it
+    if (startI > 0)
+    {
+        Info<< "    Dropped first " << startI << " of " << sampledTimePoints
+            << " samples (" << 100*(startTime - tSampled[0])
+              /(tSampled[sampledTimePoints-1] - tSampled[0])
+            << "% of the record) to get FFT size " << nFftTimePoints
+            << endl;
+    }
 
-    Info << "Prepare to fft..." << endl;
-
-    label nFftTimePoints = sampledTimePoints - 1;
     scalar deltaIntT = lastTime/scalar(nFftTimePoints);
 
     // frequencies i/lastTime up to maxFreq, but not above the Nyquist one
@@ -187,7 +228,7 @@ int main(int argc, char *argv[])
     labelList intLower(nFftTimePoints);
     scalarList intWeight(nFftTimePoints);
 
-    uniformInterpolationWeights(tSampled, tSampled[0], deltaIntT, intLower, intWeight);
+    uniformInterpolationWeights(tSampled, startTime, deltaIntT, intLower, intWeight);
 
     List<scalar> pInt(nFftTimePoints); // interpolated pressure in one point
 
