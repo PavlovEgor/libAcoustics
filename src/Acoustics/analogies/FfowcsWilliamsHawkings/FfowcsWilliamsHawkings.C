@@ -336,6 +336,9 @@ void Foam::functionObjects::FfowcsWilliamsHawkings::correct()
     {
         forAll(observers_, iObs)
         {
+            // acoustic pressure is the sum over all control surfaces
+            scalar oap = 0;
+
             forAll(controlSurfaces_, iSurf)
             {
                 const sampledSurface& surf = controlSurfaces_[iSurf];
@@ -350,13 +353,13 @@ void Foam::functionObjects::FfowcsWilliamsHawkings::correct()
                 const scalarField rhoS (surfaceDensity(surf)());
                 const scalarField pS (surfacePressure(surf)() - pInf_);
 
-                scalar oap = fwhFormulationPtr_->observerAcousticPressure(Sf, uS, rhoS, pS, iObs, iSurf, ct);
+                oap += fwhFormulationPtr_->observerAcousticPressure(Sf, uS, rhoS, pS, iObs, iSurf, ct);
+            }
 
-                if (Pstream::master())
-                {
-                    observers_[iObs].append(ct, oap);
-                    Log<<"OAP = "<< oap <<nl;
-                }
+            if (Pstream::master())
+            {
+                observers_[iObs].append(ct, oap);
+                Log<<"OAP = "<< oap <<nl;
             }
         }
     }
