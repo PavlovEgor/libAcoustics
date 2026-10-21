@@ -1,5 +1,4 @@
 FileInterface/FileInterface.C
-Interpolator/Interpolator.C
 surfaceNoise.C
 
 EXE = $(FOAM_MODULE_APPBIN)/surfaceNoise

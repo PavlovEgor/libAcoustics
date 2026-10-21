@@ -1,171 +1,264 @@
+/*---------------------------------------------------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     |
+    \\  /    A nd           | Copyright (C) 2011-2013 OpenFOAM Foundation
+     \\/     M anipulation  |
+-------------------------------------------------------------------------------
+License
+    This file is part of OpenFOAM.
+
+    OpenFOAM is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    OpenFOAM is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with OpenFOAM.  If not, see <http://www.gnu.org/licenses/>.
+
+\*---------------------------------------------------------------------------*/
+
 #include "FileInterface.H"
+#include "IFstream.H"
+#include "OFstream.H"
 
-//constructor & destructor
+#include <cstdlib>
 
-namespace Foam
+// * * * * * * * * * * * * * * * Local Functions * * * * * * * * * * * * * * //
+
+namespace
 {
 
-FileInterface::FileInterface(const fileName& name)
+//- Parse whitespace-separated numbers up to the first non-number,
+//- calling action(index, value) for each. Return the number of values.
+template<class Action>
+Foam::label parseValues(const std::string& line, const Action& action)
+{
+    const char* p = line.c_str();
+    char* end = nullptr;
+
+    Foam::label n = 0;
+
+    while (true)
+    {
+        const double value = std::strtod(p, &end);
+
+        if (end == p)
+        {
+            break;
+        }
+
+        action(n, value);
+
+        ++n;
+        p = end;
+    }
+
+    return n;
+}
+
+
+//- True if the line contains only whitespace
+bool isBlank(const std::string& line)
+{
+    return line.find_first_not_of(" \t\r") == std::string::npos;
+}
+
+
+//- Write complex number as Re+Imj
+void writeComplex(Foam::Ostream& os, const Foam::complex& z)
+{
+    os  << z.real() << (z.imag() < 0 ? '-' : '+') << Foam::mag(z.imag())
+        << 'j';
+}
+
+} // End anonymous namespace
+
+
+// * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
+
+Foam::FileInterface::FileInterface(const fileName& name)
 :
-    name_(name),
-    outputFormat_("gmsh")
+    name_(name)
+{}
+
+
+// * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
+
+void Foam::FileInterface::read
+(
+    scalarList& times,
+    List<scalarList>& pressure
+) const
 {
-}
+    IFstream is(name_);
 
-FileInterface::~FileInterface()
-{
-}
-
-//private functions
-
-void FileInterface::writeComplexNumber(const complex& number, autoPtr<OFstream>& os)
-{
-    os()    << number.Re();
-
-    label sgn = sign(number.Im());
-
-    if (sgn == 1)
+    if (!is.good())
     {
-        os() << "+";
-    }
-    else
-    {
-        os() << "-";
-    }
-
-    os() << fabs(number.Im());
-    os() << "j";
-}
-
-//public functions
-
-autoPtr<List<List<scalar > > > FileInterface::read()
-{
-    autoPtr<IFstream> inFilePtr;
-
-    if (!bool(inFilePtr))
-    {
-        inFilePtr.reset
-        (
-            new IFstream
-            (
-                name_
-            )
-        );
-    }
-
-    List<List<scalar> > data;
-    label probeI = 0;
-    scalar num = 0;
-    string line;
-
-    if (inFilePtr.valid())
-    {
-        while(inFilePtr().getLine(line))
-        {
-            probeI ++;
-            data.resize(probeI);
-            label pointI = 0;
-            IStringStream lineStream(line);
-
-            while(lineStream >> num)
-            {
-                pointI++;
-                data[probeI-1].resize(pointI);
-                data[probeI-1][pointI-1] = num;
-            }
-        }
-
-        //check if last string has equal size with previous strings
-        label refSize = data[0].size();
-        label lastStrSize = data[probeI-1].size();
-
-        if (lastStrSize < refSize) // short last string shows the lost part of data
-        {
-            Info << "Cut tail of damaged data"  << endl;
-            data.resize(probeI-1);
-        }
-
-        Info << "OK" << nl;
-    }
-    else
-    {
-        FatalErrorIn
-        (
-            "Foam::autoPtr<Foam::List<Foam::List<scalar > > > read()"
-        )   << "IFstream is not valid " << nl
+        FatalErrorInFunction
+            << "Cannot open file " << name_ << nl
             << exit(FatalError);
     }
 
-    return autoPtr<List<List<scalar> > >
-    (
-        new List<List<scalar> >
-        (
-            data
-        )
-    );
+    std::string line;
 
-}
+    // First pass: count time steps and values per line,
+    // so that the storage is allocated once
 
-void FileInterface::write(const scalar frequency, const List<complex >& data)
-{
+    label nTimes = 0;
+    label nValues = 0;
 
-    if (Pstream::master() || !Pstream::parRun())
+    while (is.getLine(line))
     {
-        if (name_.ext() == "msh")
+        if (isBlank(line))
         {
-            autoPtr<OFstream> filePtr;
-
-            if (!bool(filePtr))
-            {
-            // Open new file at start up
-                filePtr.reset
-                (
-                    new OFstream
-                    (
-                       name_
-                   )
-               );
-            }
-
-            filePtr()   << "$NodeData" << nl;
-
-            //string tags
-            filePtr()   << "1" << nl;           // number of string tags
-            filePtr()   << "node_data" << nl;   // name of data
-
-            //real tags
-            filePtr()   << "1" << nl            // number of real tags
-                        << frequency << nl;     // should be output time (or frequency)
-
-            //integer tags
-            filePtr()   << "4" << nl            // number of int tags
-                        << "0" << nl            // time step index
-                        << "1" << nl            // how many field components
-                        << data.size() << nl    // number of entities (nodes or elements)
-                        << "0" << nl;
-
-            forAll(data, probeI)
-            {
-                filePtr() << probeI + 1 << ' ';
-                writeComplexNumber(data[probeI],filePtr);
-                filePtr() << nl;       
-            }
-
-            filePtr() << "$EndNodeData" << nl;
+            continue;
         }
-        else
+
+        if (!nTimes)
         {
-            FatalErrorIn
-            (
-                "Foam::FileInterface::write(const List<complex >& data)"
-            )   << "Unsupported output file format: " <<  name_.ext() << nl
-                << "Use file extension .msh" << nl
+            nValues = parseValues(line, [](const label, const scalar){});
+        }
+
+        ++nTimes;
+    }
+
+    if (nValues < 2)
+    {
+        FatalErrorInFunction
+            << "Expected time and at least one pressure value per line in "
+            << name_ << nl
+            << exit(FatalError);
+    }
+
+    times.resize_nocopy(nTimes);
+    pressure.resize(nValues - 1);
+
+    for (scalarList& p : pressure)
+    {
+        p.resize_nocopy(nTimes);
+    }
+
+    // Second pass: fill the data transposed to pressure[pointI][timeI]
+
+    is.rewind();
+
+    label lineI = 0;
+    label timeI = 0;
+
+    while (timeI < nTimes && is.getLine(line))
+    {
+        ++lineI;
+
+        if (isBlank(line))
+        {
+            continue;
+        }
+
+        const label n = parseValues
+        (
+            line,
+            [&](const label i, const scalar value)
+            {
+                if (i == 0)
+                {
+                    times[timeI] = value;
+                }
+                else if (i < nValues)
+                {
+                    pressure[i-1][timeI] = value;
+                }
+            }
+        );
+
+        if (n != nValues)
+        {
+            // Short last line shows the interrupted write
+            if (n < nValues && timeI == nTimes - 1)
+            {
+                WarningInFunction
+                    << "Dropped incomplete last line " << lineI
+                    << " of " << name_ << endl;
+
+                break;
+            }
+
+            FatalErrorInFunction
+                << "Line " << lineI << " of " << name_ << " has " << n
+                << " values, expected " << nValues << nl
                 << exit(FatalError);
+        }
+
+        ++timeI;
+    }
+
+    if (timeI < nTimes)
+    {
+        times.resize(timeI);
+
+        for (scalarList& p : pressure)
+        {
+            p.resize(timeI);
         }
     }
 }
 
-} // end namespace Foam
 
-//END_OF_FILE
+void Foam::FileInterface::write
+(
+    const scalar frequency,
+    const UList<complex>& data
+) const
+{
+    if (name_.ext() != "msh")
+    {
+        FatalErrorInFunction
+            << "Unsupported output file format: " << name_.ext() << nl
+            << "Use file extension .msh" << nl
+            << exit(FatalError);
+    }
+
+    OFstream os(name_);
+
+    if (!os.good())
+    {
+        FatalErrorInFunction
+            << "Cannot open file " << name_ << nl
+            << exit(FatalError);
+    }
+
+    os  << "$NodeData" << nl
+
+        // String tags: number of tags, name of data
+        << 1 << nl
+        << "node_data" << nl
+
+        // Real tags: number of tags, time (frequency here)
+        << 1 << nl
+        << frequency << nl
+
+        // Integer tags: number of tags, time step index,
+        // number of field components, number of nodes, partition index
+        << 4 << nl
+        << 0 << nl
+        << 1 << nl
+        << data.size() << nl
+        << 0 << nl;
+
+    forAll(data, pointI)
+    {
+        os  << pointI + 1 << ' ';
+        writeComplex(os, data[pointI]);
+        os  << nl;
+    }
+
+    os  << "$EndNodeData" << nl;
+}
+
+
+// ************************************************************************* //

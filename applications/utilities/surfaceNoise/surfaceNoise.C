@@ -57,10 +57,10 @@ SeeAlso
 #include "timeSelector.H"
 #include "Time.H"
 #include "Pair.H"
+#include "OFstream.H"
 
 #include "FoamFftwDriver.H"
 #include "FileInterface/FileInterface.H"
-#include "Interpolator/Interpolator.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -86,6 +86,44 @@ Foam::autoPtr<Foam::List<Foam::complex> > fft(const List<scalar> &p, scalar last
 }
 
 
+// linear interpolation from ascending tSampled to the uniform grid t0 + j*dt:
+// value[j] = data[lower[j]] + weight[j]*(data[lower[j]+1] - data[lower[j]]);
+// the grid is the same for all surface points, so weights are computed once
+void uniformInterpolationWeights
+(
+    const UList<scalar>& tSampled,
+    const scalar t0,
+    const scalar dt,
+    labelList& lower,
+    scalarList& weight
+)
+{
+    const label lastI = tSampled.size() - 2;
+
+    label i = 0;
+
+    forAll(lower, j)
+    {
+        const scalar t = t0 + j*dt;
+
+        while (i < lastI && tSampled[i+1] < t)
+        {
+            ++i;
+        }
+
+        const scalar dtSampled = tSampled[i+1] - tSampled[i];
+
+        lower[j] = i;
+        weight[j] =
+        (
+            dtSampled > 0
+          ? min(max((t - tSampled[i])/dtSampled, scalar(0)), scalar(1))
+          : scalar(0)
+        );
+    }
+}
+
+
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 int main(int argc, char *argv[])
@@ -105,27 +143,24 @@ int main(int argc, char *argv[])
 
     FileInterface reader(pFileName);
 
-    autoPtr<List<List<scalar> > > ptData = reader.read();
+    // sampled times and pressure per point: pSampled[pointI][timeI]
+    scalarList tSampled;
+    List<scalarList> pSampled;
 
-    //------------------------
-    //prepare place for sampling
+    reader.read(tSampled, pSampled);
 
     //number of sampled (init) times
-    label sampledTimePoints = ptData().size();
+    label sampledTimePoints = tSampled.size();
 
-    List<scalar> tSampled(sampledTimePoints,0.0);
-    //tSampled.resize(sampledTimePoints);
-
-    forAll(tSampled,tI)
+    if (sampledTimePoints < 2)
     {
-        tSampled[tI] = ptData()[tI][0];
+        FatalErrorInFunction
+            << "At least 2 time samples are required, got "
+            << sampledTimePoints << exit(FatalError);
     }
 
-    scalar lastTime = tSampled[sampledTimePoints-1];
-
-    // pressure data
-    List<scalar> pSampled(sampledTimePoints,0.0); // just buffer for pressure data in one point
-    //pSampled.resize(sampledTimePoints);
+    // sampled signal duration (sampling may start at non-zero time)
+    scalar lastTime = tSampled[sampledTimePoints-1] - tSampled[0];
 
     //------------------------
     //calculate the interpolation time interval
@@ -136,7 +171,12 @@ int main(int argc, char *argv[])
     scalar deltaIntT = lastTime / (scalar(nFftTimePoints) );
     label freqPoints = ceil(0.5*scalar(nFftTimePoints)) + 1;
 
-    //pInt.resize(nFftTimePoints);
+    labelList intLower(nFftTimePoints);
+    scalarList intWeight(nFftTimePoints);
+
+    uniformInterpolationWeights(tSampled, tSampled[0], deltaIntT, intLower, intWeight);
+
+    List<scalar> pInt(nFftTimePoints); // interpolated pressure in one point
 
 
     //------------------------
@@ -149,34 +189,35 @@ int main(int argc, char *argv[])
         freq[i] = scalar(i)/lastTime;
     }
 
-    List<List<complex > > allComplexPressures(freqPoints); // buffer for all complex pressures
-    //allComplexPressures.resize(freqPoints);   
+    // buffer for all complex pressures: allComplexPressures[freqI][pointI]
+    List<List<complex>> allComplexPressures
+    (
+        freqPoints,
+        List<complex>(pSampled.size())
+    );
 
     autoPtr<List<complex > > fftOnePoint;
 
-    label nSurfPoints = ptData()[0].size();
-
     Info << "Calculate interpolation and FFT..." << endl;
 
-    for (label i = 1; i <= nSurfPoints; ++i) //loop starts from 1 because time value is placed on 0 position
-    {                    
-        forAll(pSampled,pI)
+    forAll(pSampled, pointI)
+    {
+        const scalarList& p = pSampled[pointI];
+
+        forAll(pInt, j)
         {
-            pSampled[pI] = ptData()[pI][i];
+            const scalar p0 = p[intLower[j]];
+
+            pInt[j] = p0 + intWeight[j]*(p[intLower[j]+1] - p0);
         }
-
-        Interpolator interpolator;
-
-        List<scalar> pInt = interpolator.interpolate(tSampled,pSampled,nFftTimePoints,deltaIntT);
 
         // calculate fft
         fftOnePoint = fft(pInt, lastTime);
 
         //write to buffer
-        forAll(allComplexPressures,freqI)
+        forAll(allComplexPressures, freqI)
         {
-            allComplexPressures[freqI].resize(i);
-            allComplexPressures[freqI][i-1] = fftOnePoint()[freqI];
+            allComplexPressures[freqI][pointI] = fftOnePoint()[freqI];
         }
     }
 
