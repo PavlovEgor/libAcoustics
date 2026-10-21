@@ -28,6 +28,7 @@ License
 #include "FfowcsWilliamsHawkings.H"
 #include "fwhFormulation.H"
 #include "volFields.H"
+#include "StringStream.H"
 #include "addToRunTimeSelectionTable.H"
 
 // * * * * * * * * * * * * * * Static Data Members * * * * * * * * * * * * * //
@@ -283,6 +284,15 @@ Foam::functionObjects::FfowcsWilliamsHawkings::~FfowcsWilliamsHawkings()
 
 bool Foam::functionObjects::FfowcsWilliamsHawkings::read(const dictionary& dict)
 {
+    // settings of the formulation data, to detect their change on re-read
+    const bool reRead = bool(fwhFormulationPtr_);
+    const word oldType(formulationType_);
+    const vector oldU0(U0_);
+    const scalar oldC0 = c0_;
+    const bool oldFixedDelay = fixedResponseDelay_;
+    const scalar oldDelay = responseDelay_;
+    const bool oldMoving = nonUniformSurfaceMotion_;
+
     if (!AcousticAnalogy::read(dict))
     {
         return false;
@@ -309,9 +319,10 @@ bool Foam::functionObjects::FfowcsWilliamsHawkings::read(const dictionary& dict)
 
     dict.readEntry("interpolationScheme", interpolationScheme_);
 
-    dict.readIfPresent("nonUniformSurfaceMotion", nonUniformSurfaceMotion_);
+    nonUniformSurfaceMotion_ =
+        dict.getOrDefault("nonUniformSurfaceMotion", false);
 
-    dict.readIfPresent("fixedResponseDelay", fixedResponseDelay_);
+    fixedResponseDelay_ = dict.getOrDefault<Switch>("fixedResponseDelay", true);
 
     if (!fixedResponseDelay_ || !dict.readIfPresent("responseDelay", responseDelay_))
     {
@@ -320,20 +331,57 @@ bool Foam::functionObjects::FfowcsWilliamsHawkings::read(const dictionary& dict)
 
     cleanFreq_ = dict.getOrDefault<label>("cleanFreq", 100);
 
-    const fvMesh& mesh = refCast<const fvMesh>(obr_);
+    // surfaces are created again only if their description is changed
+    OStringStream surfacesDescription;
+    surfacesDescription << dict.lookupEntry("surfaces", keyType::LITERAL);
 
-    PtrList<sampledSurface> newList
+    const bool surfacesChanged =
+        (surfacesDescription.str() != surfacesDescription_);
+
+    if (surfacesChanged)
+    {
+        surfacesDescription_ = surfacesDescription.str();
+
+        const fvMesh& mesh = refCast<const fvMesh>(obr_);
+
+        PtrList<sampledSurface> newList
+        (
+            dict.lookup("surfaces"),
+            sampledSurface::iNew(mesh)
+        );
+
+        controlSurfaces_.transfer(newList);
+
+        // Ensure all surfaces are expired
+        expire();
+    }
+
+    // the formulation data depend on the surfaces, the observers and
+    // the settings: keep them with the source history if not changed
+    if
     (
-        dict.lookup("surfaces"),
-        sampledSurface::iNew(mesh)
-    );
+        reRead
+     && (
+            surfacesChanged
+         || observersChanged_
+         || formulationType_ != oldType
+         || U0_ != oldU0
+         || c0_ != oldC0
+         || fixedResponseDelay_ != oldFixedDelay
+         || responseDelay_ != oldDelay
+         || nonUniformSurfaceMotion_ != oldMoving
+        )
+    )
+    {
+        WarningInFunction
+            << "Settings of " << name() << " are changed,"
+            << " the source history is reset" << endl;
 
-    controlSurfaces_.transfer(newList);
+        update();
+        initialize();
+    }
 
-    // Ensure all surfaces are expired
-    expire();
-
-    if (controlSurfaces_.size())
+    if (surfacesChanged && controlSurfaces_.size())
     {
         Log << "Function object " << name() << ":" << nl
             << "    Reading Ffowcs Williams - Hawkings analogy control"
@@ -346,7 +394,7 @@ bool Foam::functionObjects::FfowcsWilliamsHawkings::read(const dictionary& dict)
         Log << endl;
     }
 
-    if (Pstream::master() && debug)
+    if (surfacesChanged && Pstream::master() && debug)
     {
         Pout<< "FWH control surfaces additional info:" << nl << "(" << nl;
 

@@ -143,6 +143,9 @@ class FfowcsWilliamsHawkings
         //- Control surfaces
         PtrList<sampledSurface> controlSurfaces_;
 
+        //- Dictionary entry of the control surfaces, to detect its change
+        string surfacesDescription_;
+
 
 protected:
 

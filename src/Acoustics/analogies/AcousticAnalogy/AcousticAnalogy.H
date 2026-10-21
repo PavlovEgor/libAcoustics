@@ -113,6 +113,9 @@ protected:
         //- List of observers
         List<SoundObserver> observers_;
 
+        //- Observers are created or changed by the last read()
+        bool observersChanged_;
+
         //- Time steps since the last probe
         label probeI_;
 
@@ -121,6 +124,9 @@ protected:
 
         //- Open the time history output
         void makeFile();
+
+        //- Write the column names of the time history output
+        void writeFileHeader();
 
         //- Write the observer spectra that are due
         void writeFft();
@@ -190,7 +196,8 @@ public:
             }
 
 
-        //- Read the analogy settings
+        //- Read the analogy settings. The observers and their histories
+        //- are kept if their description is not changed
         virtual bool read(const dictionary&);
 
         //- Execute, does nothing

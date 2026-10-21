@@ -59,6 +59,7 @@ Foam::functionObjects::AcousticAnalogy::AcousticAnalogy
     fftInterpolationScheme_("linear"),
     c0_(300.0),
     observers_(0),
+    observersChanged_(true),
     probeI_(0)
 {
 }
@@ -84,18 +85,33 @@ Foam::functionObjects::AcousticAnalogy::AcousticAnalogy
     fftInterpolationScheme_("linear"),
     c0_(300.0),
     observers_(0),
+    observersChanged_(true),
     probeI_(0)
 {
 }
 
+void Foam::functionObjects::AcousticAnalogy::writeFileHeader()
+{
+    analogyOutPtr_() << "Time" << " ";
+    forAll(observers_, iObserver)
+    {
+        analogyOutPtr_() << observers_[iObserver].name() << "_pFluct ";
+    }
+    analogyOutPtr_() << endl;
+}
+
 void Foam::functionObjects::AcousticAnalogy::makeFile()
 {
-    if (Pstream::master())
+    // the file is open on the master only
+    if (analogyOutPtr_)
     {
-        if(analogyOutPtr_.valid())
+        // observers are changed by re-read: header of the new columns
+        if (observersChanged_)
         {
-            return;
+            writeFileHeader();
         }
+
+        return;
     }
 
     fileName ResultsDir;
@@ -126,12 +142,7 @@ void Foam::functionObjects::AcousticAnalogy::makeFile()
             )
         );
 
-        analogyOutPtr_() << "Time" << " ";
-        forAll(observers_, iObserver)
-        {
-            analogyOutPtr_() << observers_[iObserver].name() << "_pFluct ";
-        }
-        analogyOutPtr_() << endl;
+        writeFileHeader();
     }
 }
 
@@ -220,24 +231,48 @@ bool Foam::functionObjects::AcousticAnalogy::read(const dictionary& dict)
     //Ask for rhoRef again, because libforces sometimes do not
     dict.readEntry("rhoInf", rhoRef_);
 
-    //read observers
+    // read observers, keep them with their histories if not changed
     {
         const dictionary& obsDict = dict.subDict("observers");
+        const wordList names(obsDict.toc());
 
-        for (const word& oname : obsDict.toc())
+        List<SoundObserver> observers(names.size());
+
+        forAll(names, i)
         {
-            const dictionary& oDict = obsDict.subDict(oname);
+            const dictionary& oDict = obsDict.subDict(names[i]);
 
-            observers_.append
+            observers[i] = SoundObserver
             (
-                SoundObserver
-                (
-                    oname,
-                    oDict.get<vector>("position"),
-                    oDict.getOrDefault<scalar>("pRef", 2e-5),
-                    oDict.getOrDefault<label>("fftFreq", 1024)
-                )
+                names[i],
+                oDict.get<vector>("position"),
+                oDict.getOrDefault<scalar>("pRef", 2e-5),
+                oDict.getOrDefault<label>("fftFreq", 1024)
             );
+        }
+
+        observersChanged_ = (observers.size() != observers_.size());
+
+        forAll(observers, i)
+        {
+            if (observersChanged_)
+            {
+                break;
+            }
+
+            const SoundObserver& o = observers[i];
+            const SoundObserver& old = observers_[i];
+
+            observersChanged_ =
+                o.name() != old.name()
+             || o.position() != old.position()
+             || o.pRef() != old.pRef()
+             || o.fftFreq() != old.fftFreq();
+        }
+
+        if (observersChanged_)
+        {
+            observers_.transfer(observers);
         }
     }
 
