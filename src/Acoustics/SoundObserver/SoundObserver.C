@@ -27,9 +27,8 @@ License
 
 #include "SoundObserver.H"
 #include "Interpolator.H"
-
-#include <fftw3.h>
-#include <algorithm>
+#include "amplitudeSpectrum.H"
+#include "SubList.H"
 
 // * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
 
@@ -85,29 +84,33 @@ void Foam::SoundObserver::fft
     amp.clear();
     spl.clear();
 
-    const label n = pressure_.size();
-
-    if (n < 2 || times_.back() <= times_.front())
+    if (pressure_.size() < 2 || times_.back() <= times_.front())
     {
         return;
     }
 
-    // uniform FFT grid with the mean sampled time step
-    const scalar dt = (times_.back() - times_.front())/(n - 1);
+    // uniform grid over the end of the record with the mean time step
+    amplitudeSpectrum spectrum(times_);
+
+    const label start = spectrum.start();
+    const label n = spectrum.size();
+    const scalar dt = spectrum.dt();
 
     // samples with the constant time step are used as they are
     bool uniform = true;
 
-    for (label i = 1; uniform && i < n; ++i)
+    for (label i = start + 1; uniform && i < times_.size(); ++i)
     {
         uniform = mag(times_[i] - times_[i-1] - dt) < 1e-6*dt;
     }
 
-    // otherwise they are interpolated to the uniform grid
-    autoPtr<Interpolator> interpolator;
-
-    if (!uniform)
+    if (uniform)
     {
+        spectrum.transform(SubList<scalar>(pressure_, n, start));
+    }
+    else
+    {
+        // otherwise they are interpolated to the grid. The scheme is
         // selected without the New() message, the update is frequent
         auto* ctorPtr =
             Interpolator::timesConstructorTable(interpolationScheme);
@@ -122,59 +125,30 @@ void Foam::SoundObserver::fft
             ) << exit(FatalError);
         }
 
-        interpolator.reset(ctorPtr(times_, times_.front(), dt, n));
-    }
+        autoPtr<Interpolator> interpolator
+        (
+            ctorPtr(times_, spectrum.t0(), dt, n)
+        );
 
-    // real-to-complex FFT: n/2 + 1 frequencies up to the Nyquist one
-    const label nFreq = n/2 + 1;
-
-    double* fftIn = fftw_alloc_real(n);
-    fftw_complex* fftOut = fftw_alloc_complex(nFreq);
-
-    fftw_plan fftPlan =
-        fftw_plan_dft_r2c_1d(n, fftIn, fftOut, FFTW_ESTIMATE);
-
-    if (interpolator)
-    {
-        UList<scalar> pUniform(fftIn, n);
-
+        scalarList pUniform(n);
         interpolator->interpolate(pressure_, pUniform);
-    }
-    else
-    {
-        std::copy(pressure_.cbegin(), pressure_.cend(), fftIn);
+
+        spectrum.transform(pUniform);
     }
 
-    fftw_execute(fftPlan);
+    const label nFreq = spectrum.nFrequencies();
 
     freq.resize(nFreq);
     amp.resize(nFreq);
     spl.resize(nFreq);
 
-    // n samples cover the period n*dt
-    const scalar period = n*dt;
-
     forAll(freq, k)
     {
-        // a single value at zero and Nyquist frequencies: its amplitude
-        // is |X|/n and the rms is equal to it, otherwise 2|X|/n and
-        // amplitude/sqrt(2)
-        const bool single = (k == 0 || 2*k == n);
-
-        freq[k] = k/period;
-
-        amp[k] =
-            (single ? 1.0 : 2.0)/n
-           *Foam::sqrt(sqr(fftOut[k][0]) + sqr(fftOut[k][1]));
-
-        const scalar pRms = single ? amp[k] : amp[k]/Foam::sqrt(2.0);
-
-        spl[k] = (amp[k] > SMALL) ? 20*Foam::log10(pRms/pRef_) : 0;
+        freq[k] = spectrum.frequency(k);
+        amp[k] = mag(spectrum.amplitude(k));
+        spl[k] =
+            (amp[k] > SMALL) ? 20*Foam::log10(spectrum.rms(k)/pRef_) : 0;
     }
-
-    fftw_destroy_plan(fftPlan);
-    fftw_free(fftIn);
-    fftw_free(fftOut);
 }
 
 

@@ -34,6 +34,7 @@ Description
 #include "catch.hpp"
 
 #include "SoundObserver.H"
+#include "amplitudeSpectrum.H"
 #include "mathematicalConstants.H"
 
 using namespace Foam;
@@ -67,6 +68,15 @@ TEST_CASE("Checks SoundObserver history and spectrum", "[testSoundObserver]")
 
     // frequency step 1/(n*dt) = 50 Hz
     const scalar df = 1/(n*dt);
+
+    SECTION("FFT size")
+    {
+        REQUIRE(amplitudeSpectrum::fftSize(1) == 1);
+        REQUIRE(amplitudeSpectrum::fftSize(200) == 200);
+        REQUIRE(amplitudeSpectrum::fftSize(199) == 196);
+        REQUIRE(amplitudeSpectrum::fftSize(1031) == 1029);
+        REQUIRE(amplitudeSpectrum::fftSize(1024) == 1024);
+    }
 
     SECTION("History and update")
     {
@@ -105,8 +115,9 @@ TEST_CASE("Checks SoundObserver history and spectrum", "[testSoundObserver]")
     {
         SoundObserver obs("R-A", Zero, pRef, n);
 
-        // mean, two tones on the bins 7 and 31, Nyquist component
-        for (label i = 0; i < n; ++i)
+        // mean, two tones on the bins 7 and 31, Nyquist component;
+        // n + 1 samples cover the period n*dt, FFT size is n
+        for (label i = 0; i <= n; ++i)
         {
             const scalar t = i*dt;
 
@@ -141,6 +152,28 @@ TEST_CASE("Checks SoundObserver history and spectrum", "[testSoundObserver]")
         REQUIRE(mag(spl[n/2] - 20*Foam::log10(0.25/pRef)) < 1e-9);
     }
 
+    SECTION("First samples are dropped for the FFT size")
+    {
+        // n samples: FFT size 196 over the last 196 time steps
+        SoundObserver obs("R-A", Zero, pRef, n);
+
+        const label nFft = 196;
+        const scalar f = 9/(nFft*dt);
+
+        for (label i = 0; i < n; ++i)
+        {
+            obs.append(t0 + i*dt, 0.7*Foam::cos(twoPi*f*i*dt));
+        }
+
+        scalarField freq, amp, spl;
+        obs.fft("linear", freq, amp, spl);
+
+        REQUIRE(freq.size() == nFft/2 + 1);
+        REQUIRE(mag(freq[9] - f) < 1e-9*f);
+        REQUIRE(mag(amp[9] - 0.7) < 1e-12);
+        REQUIRE(maxOtherAmp(amp, labelList({9})) < 1e-12);
+    }
+
     SECTION("Variable time step")
     {
         // time step varies by +-30%
@@ -152,15 +185,18 @@ TEST_CASE("Checks SoundObserver history and spectrum", "[testSoundObserver]")
             times[i] = times[i-1] + dt*(1 + 0.3*Foam::sin(1.7*i));
         }
 
-        // tone on the bin 5 of the uniform grid with the mean time step
-        const scalar dtMean = (times.last() - times.first())/(times.size() - 1);
-        const scalar f = 5/(times.size()*dtMean);
+        // tone on the bin 5 of the FFT grid with the mean time step
+        const amplitudeSpectrum grid(times);
+        const scalar f = 5/grid.period();
+
+        REQUIRE(grid.size() == 392);
+        REQUIRE(grid.start() == 7);
 
         SoundObserver obs("R-A", Zero, pRef, times.size());
 
         for (const scalar t : times)
         {
-            obs.append(t, Foam::cos(twoPi*f*(t - t0)));
+            obs.append(t, Foam::cos(twoPi*f*(t - grid.t0())));
         }
 
         scalarField freq, amp, spl;

@@ -47,7 +47,9 @@ Description
     }
     \endverbatim
 
-    The spectrum is computed from the whole history. Samples with a variable
+    The spectrum is computed from the history without its first samples,
+    so that the FFT size has small prime factors only (see
+    Foam::amplitudeSpectrum). Samples with a variable
     time step are interpolated to the uniform grid with the mean time step
     by the fftInterpolationScheme, constant time step samples are used as
     they are.
@@ -58,6 +60,7 @@ SourceFiles
     SoundObserver.C
 
 SeeAlso
+    Foam::amplitudeSpectrum
     Foam::Interpolator
 
 \*---------------------------------------------------------------------------*/
