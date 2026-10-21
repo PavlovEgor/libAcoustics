@@ -1,20 +1,9 @@
-    word dictName("surfaceNoiseDict");
+    // system/surfaceNoiseDict or the file given by -dict
+    const word dictName("surfaceNoiseDict");
 
-    if (args.found("dict"))
-    {
-        dictName = args["dict"];
-    }
+    #include "setSystemRunTimeDictionaryIO.H"
 
-    IOdictionary dict
-    (
-        IOobject
-        (
-            dictName,
-            runTime.system(),
-            runTime,
-            IOobject::MUST_READ
-        )
-    );
+    IOdictionary dict(dictIO);
 
     // upper frequency of frequency band
     scalar maxFreq = dict.lookupOrDefault("maxFrequency", 10000.0);
