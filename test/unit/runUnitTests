@@ -5,6 +5,9 @@ testExpiredFunction
 cd ../testValueAt/
 testValueAt
 
+cd ../testSoundObserver/
+testSoundObserver
+
 cd ../
 
 #

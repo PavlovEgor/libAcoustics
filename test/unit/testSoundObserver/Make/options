@@ -1,0 +1,7 @@
+EXE_INC = \
+    -I../../utils \
+    -I../../../src/Acoustics/lnInclude
+
+EXE_LIBS = \
+    -L$(FOAM_USER_LIBBIN) \
+    -lAcoustics

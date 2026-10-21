@@ -1,0 +1,4 @@
+../../utils/CatchMain.C
+testSoundObserver.C
+
+EXE = $(FOAM_USER_APPBIN)/testSoundObserver

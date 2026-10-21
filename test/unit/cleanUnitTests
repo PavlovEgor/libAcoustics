@@ -11,6 +11,10 @@ rm -rf acousticData/
 rm -rf utils/
 rm -rf Test/
 
+cd ../testSoundObserver/
+wclean
+rm -rf utils/
+
 cd ../
 
 #

@@ -29,6 +29,16 @@ else
     errors=`expr $errors + 1`
     echo $'===== testValueAt		FAILED =====\n' >> ../../summary.log
 fi
+cd ../testSoundObserver/
+testSoundObserver >> ../../total.log 2>&1
+rc=$?
+if [ "$rc" = "0" ]
+then
+    echo $'===== testSoundObserver		OK =====\n' >> ../../summary.log
+else
+    errors=`expr $errors + 1`
+    echo $'===== testSoundObserver		FAILED =====\n' >> ../../summary.log
+fi
 cd ../../integration/testFormulationFunctions/
 testFormulationFunction >> ../../total.log 2>&1
 rc=$?

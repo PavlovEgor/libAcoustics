@@ -5,6 +5,9 @@ wmake
 cd ../testValueAt/
 wmake
 
+cd ../testSoundObserver/
+wmake
+
 cd ../
 
 #
