@@ -42,14 +42,20 @@ Description
 
     maxFrequency    1000;
 
+    interpolationScheme linear; // optionally: linear (default), cubicSpline
+
     \endverbatim
 
+    Pressure is interpolated to the uniform grid with the mean sampled time
+    step, so frequencies above maxFrequency are not aliased into the
+    spectrum. maxFrequency above the Nyquist frequency of the sampled data
+    is truncated.
 
     Output:
     - FFT of the pressure data
 
 SeeAlso
-    FoamFftwDriver.H
+    Interpolator.H
 
 \*---------------------------------------------------------------------------*/
 
@@ -60,6 +66,7 @@ SeeAlso
 #include "OFstream.H"
 
 #include "FileInterface/FileInterface.H"
+#include "Interpolator/Interpolator.H"
 
 #include <fftw3.h>
 #include <algorithm>
@@ -95,44 +102,6 @@ label fftSize(label n)
     }
 
     return n;
-}
-
-
-// linear interpolation from ascending tSampled to the uniform grid t0 + j*dt:
-// value[j] = data[lower[j]] + weight[j]*(data[lower[j]+1] - data[lower[j]]);
-// the grid is the same for all surface points, so weights are computed once
-void uniformInterpolationWeights
-(
-    const UList<scalar>& tSampled,
-    const scalar t0,
-    const scalar dt,
-    labelList& lower,
-    scalarList& weight
-)
-{
-    const label lastI = tSampled.size() - 2;
-
-    label i = 0;
-
-    forAll(lower, j)
-    {
-        const scalar t = t0 + j*dt;
-
-        while (i < lastI && tSampled[i+1] < t)
-        {
-            ++i;
-        }
-
-        const scalar dtSampled = tSampled[i+1] - tSampled[i];
-
-        lower[j] = i;
-        weight[j] =
-        (
-            dtSampled > 0
-          ? min(max((t - tSampled[i])/dtSampled, scalar(0)), scalar(1))
-          : scalar(0)
-        );
-    }
 }
 
 
@@ -225,10 +194,17 @@ int main(int argc, char *argv[])
         << ", frequency step: " << 1/lastTime
         << ", frequencies: " << freqPoints << endl;
 
-    labelList intLower(nFftTimePoints);
-    scalarList intWeight(nFftTimePoints);
-
-    uniformInterpolationWeights(tSampled, startTime, deltaIntT, intLower, intWeight);
+    autoPtr<Interpolator> interpolator
+    (
+        Interpolator::New
+        (
+            interpolationScheme,
+            tSampled,
+            startTime,
+            deltaIntT,
+            nFftTimePoints
+        )
+    );
 
     List<scalar> pInt(nFftTimePoints); // interpolated pressure in one point
 
@@ -271,14 +247,7 @@ int main(int argc, char *argv[])
 
     forAll(pSampled, pointI)
     {
-        const scalarList& p = pSampled[pointI];
-
-        forAll(pInt, j)
-        {
-            const scalar p0 = p[intLower[j]];
-
-            pInt[j] = p0 + intWeight[j]*(p[intLower[j]+1] - p0);
-        }
+        interpolator->interpolate(pSampled[pointI], pInt);
 
         std::copy(pInt.cbegin(), pInt.cend(), fftIn);
 

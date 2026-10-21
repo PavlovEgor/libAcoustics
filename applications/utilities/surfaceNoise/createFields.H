@@ -25,5 +25,6 @@
     // output directory (similar with surface name)
     fileName inputFileName = dict.get<word>("inputFileName");
 
-    //interpolation scheme
-    //word interpolationScheme = dict.lookup("interpolationScheme");
+    // interpolation scheme to the uniform FFT grid: linear, cubicSpline
+    word interpolationScheme =
+        dict.getOrDefault<word>("interpolationScheme", "linear");
