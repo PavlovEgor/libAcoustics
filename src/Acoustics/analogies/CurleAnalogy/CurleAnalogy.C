@@ -63,6 +63,7 @@ Foam::functionObjects::CurleAnalogy::CurleAnalogy
 {
     this->read(dict);
     F_.resize(1);
+    F_.setTimeStepVariable(time().isAdjustTimeStep());
 }
 
 Foam::functionObjects::CurleAnalogy::CurleAnalogy
@@ -83,6 +84,7 @@ Foam::functionObjects::CurleAnalogy::CurleAnalogy
 {
     this->read(dict);
     F_.resize(1);
+    F_.setTimeStepVariable(time().isAdjustTimeStep());
 }
 
 // * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
