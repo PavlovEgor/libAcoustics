@@ -1,6 +1,7 @@
 
 SoundObserver/SoundObserver.C
 FoamFourierAnalysis/FoamFftwDriver.C
+FoamFourierAnalysis/amplitudeSpectrum.C
 
 /* Interpolation of sampled data to the uniform FFT grid */
 Interpolator/Interpolator.C

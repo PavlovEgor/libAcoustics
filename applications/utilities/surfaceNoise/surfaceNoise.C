@@ -56,6 +56,7 @@ Description
 
 SeeAlso
     Interpolator.H
+    amplitudeSpectrum.H
 
 \*---------------------------------------------------------------------------*/
 
@@ -67,43 +68,11 @@ SeeAlso
 
 #include "FileInterface/FileInterface.H"
 #include "Interpolator.H"
-
-#include <fftw3.h>
-#include <algorithm>
+#include "amplitudeSpectrum.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 using namespace Foam;
-
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
-
-
-// largest size <= n with prime factors 2, 3, 5, 7 only: FFTW is up to ten
-// times faster for such sizes than for sizes with large prime factors
-label fftSize(label n)
-{
-    for (; n > 1; --n)
-    {
-        label m = n;
-
-        for (const label p : {2, 3, 5, 7})
-        {
-            while (m % p == 0)
-            {
-                m /= p;
-            }
-        }
-
-        if (m == 1)
-        {
-            break;
-        }
-    }
-
-    return n;
-}
-
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -150,20 +119,15 @@ int main(int argc, char *argv[])
 
     Info << "Prepare to fft..." << endl;
 
-    label nFftTimePoints = fftSize(sampledTimePoints - 1);
-    label startI = sampledTimePoints - 1 - nFftTimePoints;
+    amplitudeSpectrum spectrum(tSampled);
 
-    scalar startTime = tSampled[startI];
+    label nFftTimePoints = spectrum.size();
+    label startI = spectrum.start();
+
+    scalar startTime = spectrum.t0();
 
     // duration of the analysed signal
-    scalar lastTime = tSampled[sampledTimePoints-1] - startTime;
-
-    if (lastTime <= 0)
-    {
-        FatalErrorInFunction
-            << "Sampled times must be ascending, got duration " << lastTime
-            << exit(FatalError);
-    }
+    scalar lastTime = spectrum.period();
 
     if (startI > 0)
     {
@@ -174,11 +138,11 @@ int main(int argc, char *argv[])
             << endl;
     }
 
-    scalar deltaIntT = lastTime/scalar(nFftTimePoints);
+    scalar deltaIntT = spectrum.dt();
 
     // frequencies i/lastTime up to maxFreq, but not above the Nyquist one
     label freqPoints = label(maxFreq*lastTime) + 1;
-    const label nyquistPoints = nFftTimePoints/2 + 1;
+    const label nyquistPoints = spectrum.nFrequencies();
 
     if (freqPoints > nyquistPoints)
     {
@@ -209,32 +173,15 @@ int main(int argc, char *argv[])
 
     List<scalar> pInt(nFftTimePoints); // interpolated pressure in one point
 
-    // real-to-complex FFT: one plan for all points, the buffers are reused
-    double* fftIn = fftw_alloc_real(nFftTimePoints);
-    fftw_complex* fftOut = fftw_alloc_complex(nyquistPoints);
-
-    fftw_plan fftPlan =
-        fftw_plan_dft_r2c_1d(nFftTimePoints, fftIn, fftOut, FFTW_ESTIMATE);
-
-    // amplitude normalisation: 2/N, but 1/N at zero and Nyquist frequencies
-    scalarList ampNorm(freqPoints, 2.0/nFftTimePoints);
-
-    ampNorm[0] = 1.0/nFftTimePoints;
-
-    if (nFftTimePoints % 2 == 0 && freqPoints == nyquistPoints)
-    {
-        ampNorm[freqPoints-1] = 1.0/nFftTimePoints;
-    }
-
 
     //------------------------
-    //fft for all points on surface point-by-point
+    //fft for all points on surface point-by-point, one plan for all points
 
     List<scalar> freq(freqPoints,0.0);
 
     forAll(freq,i)
     {
-        freq[i] = scalar(i)/lastTime;
+        freq[i] = spectrum.frequency(i);
     }
 
     // buffer for all complex pressures: allComplexPressures[freqI][pointI]
@@ -250,21 +197,14 @@ int main(int argc, char *argv[])
     {
         interpolator->interpolate(pSampled[pointI], pInt);
 
-        std::copy(pInt.cbegin(), pInt.cend(), fftIn);
-
-        fftw_execute(fftPlan);
+        spectrum.transform(pInt);
 
         //write to buffer
         forAll(allComplexPressures, freqI)
         {
-            allComplexPressures[freqI][pointI] =
-                complex(fftOut[freqI][0], fftOut[freqI][1])*ampNorm[freqI];
+            allComplexPressures[freqI][pointI] = spectrum.amplitude(freqI);
         }
     }
-
-    fftw_destroy_plan(fftPlan);
-    fftw_free(fftIn);
-    fftw_free(fftOut);
 
     //------------------------
 
