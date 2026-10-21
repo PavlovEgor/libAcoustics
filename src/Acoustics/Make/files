@@ -2,6 +2,11 @@
 SoundObserver/SoundObserver.C
 FoamFourierAnalysis/FoamFftwDriver.C
 
+/* Interpolation of sampled data to the uniform FFT grid */
+Interpolator/Interpolator.C
+Interpolator/linear/linearInterpolator.C
+Interpolator/cubicSpline/cubicSplineInterpolator.C
+
 /* Acoustic analogies */
 analogies/AcousticAnalogy/AcousticAnalogy.C
 analogies/CurleAnalogy/CurleAnalogy.C

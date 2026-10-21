@@ -66,7 +66,7 @@ SeeAlso
 #include "OFstream.H"
 
 #include "FileInterface/FileInterface.H"
-#include "Interpolator/Interpolator.H"
+#include "Interpolator.H"
 
 #include <fftw3.h>
 #include <algorithm>
