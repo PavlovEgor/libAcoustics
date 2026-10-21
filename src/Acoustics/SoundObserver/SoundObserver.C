@@ -2,8 +2,10 @@
   =========                 |
   \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
    \\    /   O peration     |
-    \\  /    A nd           | Copyright (C) 2011 OpenFOAM Foundation
+    \\  /    A nd           | www.openfoam.com
      \\/     M anipulation  |
+-------------------------------------------------------------------------------
+    Copyright (C) 2011 OpenFOAM Foundation
 -------------------------------------------------------------------------------
 License
     This file is part of OpenFOAM.
@@ -24,139 +26,156 @@ License
 \*---------------------------------------------------------------------------*/
 
 #include "SoundObserver.H"
-#include "mathematicalConstants.H"
+#include "Interpolator.H"
+
+#include <fftw3.h>
+#include <algorithm>
+
+// * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
 
 Foam::SoundObserver::SoundObserver()
 :
-    name_(Foam::word::null),
-    position_(vector::zero),
-    pref_(1.0e-5),
-    apressure_(0.0),
-    p_(0),
-    fftFreq_(1024)
-{
-}
+    SoundObserver(word::null, Zero, 2e-5, 1024)
+{}
 
-Foam::SoundObserver::SoundObserver(word name, vector pos, scalar pref, label fftFreq)
+
+Foam::SoundObserver::SoundObserver
+(
+    const word& name,
+    const vector& position,
+    const scalar pRef,
+    const label fftFreq
+)
 :
     name_(name),
-    position_(pos),
-    pref_(pref),
-    apressure_(0.0),
-    p_(0),
-    fftFreq_(fftFreq)
+    position_(position),
+    pRef_(pRef),
+    fftFreq_(fftFreq),
+    times_(),
+    pressure_()
+{}
+
+
+// * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
+
+void Foam::SoundObserver::append(const scalar t, const scalar p)
 {
+    times_.push_back(t);
+    pressure_.push_back(p);
 }
 
 
-Foam::SoundObserver::SoundObserver(const SoundObserver& so)
-:
-    name_(so.name_),
-    position_(so.position_),
-    pref_(so.pref_),
-    apressure_(so.apressure_),
-    p_(so.p_),
-    fftFreq_(so.fftFreq_)
+bool Foam::SoundObserver::fftDue() const
 {
+    const label n = pressure_.size();
+
+    return fftFreq_ > 0 && n > 1 && n % fftFreq_ == 0;
 }
 
-Foam::SoundObserver::SoundObserver(SoundObserver&& so)
-:
-    name_(so.name_),
-    position_(so.position_),
-    pref_(so.pref_),
-    apressure_(so.apressure_),
-    p_(so.p_),
-    fftFreq_(so.fftFreq_)
-{
-}
 
-const Foam::SoundObserver &Foam::SoundObserver::operator = (const SoundObserver& so)
+void Foam::SoundObserver::fft
+(
+    const word& interpolationScheme,
+    scalarField& freq,
+    scalarField& amp,
+    scalarField& spl
+) const
 {
-    name_ = so.name_;
-    position_ = so.position_;
-    pref_ = so.pref_;
-    apressure_ = so.apressure_;
-    p_ = so.p_;
-    fftFreq_ = so.fftFreq_;
-    return *this;
-}
+    freq.clear();
+    amp.clear();
+    spl.clear();
 
-const Foam::word& Foam::SoundObserver::name() const
-{
-    return name_;
-}
+    const label n = pressure_.size();
 
-const Foam::vector& Foam::SoundObserver::position() const
-{
-    return position_;
-}
-
-const Foam::scalar& Foam::SoundObserver::apressure() const
-{
-    return apressure_;
-}
-
-void Foam::SoundObserver::name(word name)
-{
-    name_ = name;
-}
-
-void Foam::SoundObserver::position(vector position)
-{
-    position_ = position;
-}
-
-void Foam::SoundObserver::apressure(scalar apressure)
-{
-    apressure_ = apressure;
-    p_.append(apressure);
-}
-
-Foam::autoPtr<Foam::List<Foam::List<Foam::scalar> > > Foam::SoundObserver::fft(scalar tau) const
-{
-
-    List<List<scalar> > fft_res(3);
-    forAll (fft_res, i)
+    if (n < 2 || times_.back() <= times_.front())
     {
-        fft_res[i].resize(0);
+        return;
     }
-    
-    if ( (p_.size() > 0) && (p_.size() % fftFreq_ == 0) )
+
+    // uniform FFT grid with the mean sampled time step
+    const scalar dt = (times_.back() - times_.front())/(n - 1);
+
+    // samples with the constant time step are used as they are
+    bool uniform = true;
+
+    for (label i = 1; uniform && i < n; ++i)
     {
-        FoamFftwDriver fftw (p_, tau);
-        
-        autoPtr<Pair<List<scalar> > > pfft = fftw.simpleScalarForwardTransform();
-        
-        fft_res[0].resize(pfft().first().size());
-        fft_res[1].resize(pfft().first().size());
-        fft_res[2].resize(pfft().first().size());
-        
-        forAll (pfft().first(), k)
+        uniform = mag(times_[i] - times_[i-1] - dt) < 1e-6*dt;
+    }
+
+    // otherwise they are interpolated to the uniform grid
+    autoPtr<Interpolator> interpolator;
+
+    if (!uniform)
+    {
+        // selected without the New() message, the update is frequent
+        auto* ctorPtr =
+            Interpolator::timesConstructorTable(interpolationScheme);
+
+        if (!ctorPtr)
         {
-            fft_res[0][k] = pfft().first()[k]; //Frequency, Hz
-            fft_res[1][k] = pfft().second()[k]; //pressure amplitude, Pa
-            if (fft_res[1][k] > SMALL)
-            {
-                fft_res[2][k] = 20*log10(fft_res[1][k] / pref_); //SPL, dB
-            }
-            else
-            {
-                fft_res[2][k] = 0.0;
-            }
+            FatalErrorInLookup
+            (
+                "Interpolator",
+                interpolationScheme,
+                *Interpolator::timesConstructorTablePtr_
+            ) << exit(FatalError);
         }
+
+        interpolator.reset(ctorPtr(times_, times_.front(), dt, n));
     }
-    
-    return autoPtr<List<List<scalar> > >
-    (
-        new List<List<scalar> >
-        (
-            fft_res
-        )
-    );
+
+    // real-to-complex FFT: n/2 + 1 frequencies up to the Nyquist one
+    const label nFreq = n/2 + 1;
+
+    double* fftIn = fftw_alloc_real(n);
+    fftw_complex* fftOut = fftw_alloc_complex(nFreq);
+
+    fftw_plan fftPlan =
+        fftw_plan_dft_r2c_1d(n, fftIn, fftOut, FFTW_ESTIMATE);
+
+    if (interpolator)
+    {
+        UList<scalar> pUniform(fftIn, n);
+
+        interpolator->interpolate(pressure_, pUniform);
+    }
+    else
+    {
+        std::copy(pressure_.cbegin(), pressure_.cend(), fftIn);
+    }
+
+    fftw_execute(fftPlan);
+
+    freq.resize(nFreq);
+    amp.resize(nFreq);
+    spl.resize(nFreq);
+
+    // n samples cover the period n*dt
+    const scalar period = n*dt;
+
+    forAll(freq, k)
+    {
+        // a single value at zero and Nyquist frequencies: its amplitude
+        // is |X|/n and the rms is equal to it, otherwise 2|X|/n and
+        // amplitude/sqrt(2)
+        const bool single = (k == 0 || 2*k == n);
+
+        freq[k] = k/period;
+
+        amp[k] =
+            (single ? 1.0 : 2.0)/n
+           *Foam::sqrt(sqr(fftOut[k][0]) + sqr(fftOut[k][1]));
+
+        const scalar pRms = single ? amp[k] : amp[k]/Foam::sqrt(2.0);
+
+        spl[k] = (amp[k] > SMALL) ? 20*Foam::log10(pRms/pRef_) : 0;
+    }
+
+    fftw_destroy_plan(fftPlan);
+    fftw_free(fftIn);
+    fftw_free(fftOut);
 }
 
-//
-//END-OF-FILE
-//
 
+// ************************************************************************* //

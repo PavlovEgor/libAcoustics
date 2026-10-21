@@ -4,6 +4,7 @@
 #include "Time.H"
 #include "IFstream.H"
 #include "addToRunTimeSelectionTable.H"
+#include "Interpolator.H"
 
 // * * * * * * * * * * * * * * Static Data Members * * * * * * * * * * * * * //
 
@@ -34,6 +35,7 @@ Foam::functionObjects::AcousticAnalogy::AcousticAnalogy
     timeStart_(-1.0),
     timeEnd_(-1.0),
     writeFft_(true),
+    fftInterpolationScheme_("linear"),
     c0_(300.0),
     observers_(0),
     probeI_(0)
@@ -58,6 +60,7 @@ Foam::functionObjects::AcousticAnalogy::AcousticAnalogy
     timeStart_(-1.0),
     timeEnd_(-1.0),
     writeFft_(true),
+    fftInterpolationScheme_("linear"),
     c0_(300.0),
     observers_(0),
     probeI_(0)
@@ -129,39 +132,36 @@ void Foam::functionObjects::AcousticAnalogy::writeFft()
 
     if (Pstream::master() || !Pstream::parRun())
     {
-        const fvMesh& mesh = refCast<const fvMesh>(obr_);
+        scalarField freq;
+        scalarField amp;
+        scalarField spl;
 
-        scalar	tau;
-        if (mesh.time().startTime().value() > timeStart_)
+        for (const SoundObserver& obs : observers_)
         {
-            tau = (mesh.time().value() - mesh.time().startTime().value());
-        }
-        else
-        {
-            tau = (mesh.time().value() - timeStart_);
-        }
-
-        forAll(observers_, iObserver)
-        {
-            SoundObserver& obs = observers_[iObserver];
-            autoPtr<List<List<scalar> > > obsFftPtr (obs.fft(tau));
-
-            List<List<scalar> >& obsFft = obsFftPtr();
-
-            if (obsFft[0].size() > 0)
+            if (!obs.fftDue())
             {
-                Log << "Executing fft for obs: " << obs.name() << endl;
-                fileName fftFile = ResultsDir + "/fft-" + name() + "-" + obs.name() + ".dat";
+                continue;
+            }
 
-                OFstream fftStream (fftFile);
-                fftStream << "Freq p\' spl" << endl;
+            obs.fft(fftInterpolationScheme_, freq, amp, spl);
 
-                forAll(obsFft[0], k)
-                {
-                    fftStream << obsFft[0][k] << " " << obsFft[1][k] << " " << obsFft[2][k] << endl;
-                }
+            if (freq.empty())
+            {
+                continue;
+            }
 
-                fftStream.flush();
+            Log << "Executing fft for obs: " << obs.name() << endl;
+
+            OFstream fftStream
+            (
+                ResultsDir/("fft-" + name() + "-" + obs.name() + ".dat")
+            );
+
+            fftStream << "Freq p\' spl" << nl;
+
+            forAll(freq, k)
+            {
+                fftStream << freq[k] << ' ' << amp[k] << ' ' << spl[k] << nl;
             }
         }
     }
@@ -189,7 +189,21 @@ bool Foam::functionObjects::AcousticAnalogy::read(const dictionary& dict)
 
     dict.lookup("timeEnd") >> timeEnd_;
 
-    writeFft_ = dict.lookupOrDefault("writeFft", false);
+    writeFft_ = dict.getOrDefault("writeFft", false);
+
+    fftInterpolationScheme_ =
+        dict.getOrDefault<word>("fftInterpolationScheme", "linear");
+
+    if (!Interpolator::timesConstructorTable(fftInterpolationScheme_))
+    {
+        FatalIOErrorInLookup
+        (
+            dict,
+            "fftInterpolationScheme",
+            fftInterpolationScheme_,
+            *Interpolator::timesConstructorTablePtr_
+        ) << exit(FatalIOError);
+    }
 
     dict.lookup("c0") >> c0_;
 
@@ -199,23 +213,19 @@ bool Foam::functionObjects::AcousticAnalogy::read(const dictionary& dict)
     //read observers
     {
         const dictionary& obsDict = dict.subDict("observers");
-        wordList obsNames = obsDict.toc();
-        forAll (obsNames, obsI)
+
+        for (const word& oname : obsDict.toc())
         {
-            word oname = obsNames[obsI];
-            vector opos (vector::zero);
-            obsDict.subDict(oname).lookup("position") >> opos;
-            scalar pref = obsDict.subDict(oname).lookupOrDefault("pRef",2e-05);
-            label fftFreq = obsDict.subDict(oname).lookupOrDefault("fftFreq",1024);
+            const dictionary& oDict = obsDict.subDict(oname);
 
             observers_.append
             (
                 SoundObserver
                 (
                     oname,
-                    opos,
-                    pref,
-                    fftFreq
+                    oDict.get<vector>("position"),
+                    oDict.getOrDefault<scalar>("pRef", 2e-5),
+                    oDict.getOrDefault<label>("fftFreq", 1024)
                 )
             );
         }
@@ -300,10 +310,6 @@ bool Foam::functionObjects::AcousticAnalogy::write()
     return true;
 }
 
-Foam::List<Foam::SoundObserver> Foam::functionObjects::AcousticAnalogy::getSoundObservers()
-{
-    return observers_;
-}
 //
 //END-OF-FILE
 //

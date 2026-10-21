@@ -354,8 +354,7 @@ void Foam::functionObjects::FfowcsWilliamsHawkings::correct()
 
                 if (Pstream::master())
                 {
-                    SoundObserver& obs = observers_[iObs];
-                    obs.apressure(oap); //appends new calculated acoustic pressure
+                    observers_[iObs].append(ct, oap);
                     Log<<"OAP = "<< oap <<nl;
                 }
             }
@@ -365,10 +364,9 @@ void Foam::functionObjects::FfowcsWilliamsHawkings::correct()
     {
         if (Pstream::master())
         {
-            forAll(observers_, iObs)
+            for (SoundObserver& obs : observers_)
             {
-                SoundObserver& obs = observers_[iObs];
-                obs.apressure(0.0);
+                obs.append(ct, 0);
             }
         }
     }

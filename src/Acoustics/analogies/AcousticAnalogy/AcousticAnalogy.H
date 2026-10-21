@@ -42,6 +42,10 @@ protected:
         //-
         bool writeFft_;
 
+        //- Interpolation of observer samples with a variable time step
+        //- to the uniform FFT grid, see Foam::Interpolator
+        word fftInterpolationScheme_;
+
         //- Sonic speed, m/s
         scalar c0_;
 
@@ -213,8 +217,11 @@ public:
         virtual ~AcousticAnalogy();
 
 public:
-        //- Get observers list
-        List<SoundObserver> getSoundObservers();
+        //- Observers list
+        const List<SoundObserver>& getSoundObservers() const noexcept
+        {
+            return observers_;
+        }
 
         //- Read the Curle data
         virtual bool read(const dictionary&);

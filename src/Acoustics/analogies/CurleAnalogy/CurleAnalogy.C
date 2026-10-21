@@ -153,13 +153,12 @@ void Foam::functionObjects::CurleAnalogy::correct()
 //        scalar coeff2_2d = 1. / 2. / Foam::constant::mathematical::pi;
 //        scalar coeff3_2d = sqrt(c0_) / 5.656854 / Foam::constant::mathematical::pi;
 
-        forAll (observers_, iObs)
+        for (SoundObserver& obs : observers_)
         {
-            SoundObserver& obs = observers_[iObs];
             vector l = obs.position() - c_;
             scalar r = mag(l);
-            scalar oap = l & (dotF/c0_ + F_.value(0) / r) * coeff1_3d / r / r;;
-            obs.apressure(oap);
+            scalar oap = l & (dotF/c0_ + F_.value(0) / r) * coeff1_3d / r / r;
+            obs.append(obr_.time().value(), oap);
         }
     }
 }
