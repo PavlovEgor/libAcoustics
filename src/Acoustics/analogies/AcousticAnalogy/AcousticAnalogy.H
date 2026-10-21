@@ -3,6 +3,7 @@
 #include "Tuple2.H"
 #include "OFstream.H"
 #include "SoundObserver.H"
+#include "tdPrimitive.H"
 
 #ifndef AcousticAnalogy_H
 #define AcousticAnalogy_H
@@ -71,126 +72,9 @@ protected:
 
 public:
 
+    //- Time derivative helper, see Foam::tdPrimitive
     template<class T>
-    class tdPrimitive
-    {
-
-    private:
-
-        //-
-        bool varTimeStep_;
-
-        //-
-        scalar prevt_;
-
-        //-
-        scalar deltat_;
-
-        //-
-        List<T> new_;
-
-        //-
-        List<T> old_;
-
-        //-
-        List<T> oldOld_;
-
-    public:
-
-        //-
-        tdPrimitive(T initv, scalar tprev)
-        :
-            varTimeStep_(false),
-            prevt_(tprev),
-            deltat_(tprev),
-            new_(1, initv),
-            old_(0),
-            oldOld_(0)
-        {
-        };
-
-        //-
-    
-        tdPrimitive()
-        :
-            varTimeStep_(false),
-            prevt_(0.0),
-            deltat_(GREAT),
-            new_(1, pTraits<T>::zero),
-            old_(0),
-            oldOld_(0)
-        {
-        };
-        
-        ~tdPrimitive()
-        {
-        };
-
-        void resize(label newsz)
-        {
-            new_.resize(newsz);
-        }
-        
-        void setTimeStepVariable(bool adjustTimeStep)
-        {
-            varTimeStep_ = adjustTimeStep;
-        }
-
-        label size() const
-        {
-            return new_.size();
-        }
-
-        const T& value(label idx) const
-        {
-            return new_[idx];
-        }
-
-        T& value(label idx)
-        {
-            return new_[idx];
-        }
-
-        T dot(scalar newt, label idx)
-        {
-            T dvdt (pTraits<T>::zero);
-
-            if (newt > prevt_)
-            {
-                deltat_ = newt - prevt_;
-                prevt_ = newt;
-            }
-
-            if (old_.size() <= idx)
-            {
-                old_.resize(idx+1);
-                old_[idx] = new_[idx];
-                dvdt = new_[idx] / deltat_;
-            }
-            else
-            {
-                if ((oldOld_.size() <= idx) || (varTimeStep_))
-                {
-                    dvdt = (new_[idx] - old_[idx])/deltat_;
-                    oldOld_.resize
-                    (
-                        idx+1
-                    );
-                    oldOld_[idx] = old_[idx];
-                    old_[idx] = new_[idx];
-
-                }
-                else
-                {
-                    dvdt = (3.0*new_[idx] - 4.0*old_[idx] + oldOld_[idx]) / 2.0 / deltat_;
-                    oldOld_[idx] = old_[idx];
-                    old_[idx] = new_[idx];
-                }
-            }
-            return dvdt;
-        }
-
-    };
+    using tdPrimitive = Foam::tdPrimitive<T>;
 
         //- Runtime type information
         TypeName("AcousticAnalogy");
