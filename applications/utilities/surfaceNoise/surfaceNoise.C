@@ -59,8 +59,10 @@ SeeAlso
 #include "Pair.H"
 #include "OFstream.H"
 
-#include "FoamFftwDriver.H"
 #include "FileInterface/FileInterface.H"
+
+#include <fftw3.h>
+#include <algorithm>
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -68,22 +70,6 @@ using namespace Foam;
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-
-
-// just return Re and Im parts of complex pressure amplitude; frequency is out of function
-Foam::autoPtr<Foam::List<Foam::complex> > fft(const List<scalar> &p, scalar lastTime)
-{
-    autoPtr<List<complex> > fft_resPtr;
-
-    if ( (p.size() > 0) )
-    {
-        FoamFftwDriver fftw (p, lastTime);
-        
-        fft_resPtr = fftw.simpleComplexForwardTransform();
-    }
-    
-    return fft_resPtr;
-}
 
 
 // linear interpolation from ascending tSampled to the uniform grid t0 + j*dt:
@@ -205,6 +191,23 @@ int main(int argc, char *argv[])
 
     List<scalar> pInt(nFftTimePoints); // interpolated pressure in one point
 
+    // real-to-complex FFT: one plan for all points, the buffers are reused
+    double* fftIn = fftw_alloc_real(nFftTimePoints);
+    fftw_complex* fftOut = fftw_alloc_complex(nyquistPoints);
+
+    fftw_plan fftPlan =
+        fftw_plan_dft_r2c_1d(nFftTimePoints, fftIn, fftOut, FFTW_ESTIMATE);
+
+    // amplitude normalisation: 2/N, but 1/N at zero and Nyquist frequencies
+    scalarList ampNorm(freqPoints, 2.0/nFftTimePoints);
+
+    ampNorm[0] = 1.0/nFftTimePoints;
+
+    if (nFftTimePoints % 2 == 0 && freqPoints == nyquistPoints)
+    {
+        ampNorm[freqPoints-1] = 1.0/nFftTimePoints;
+    }
+
 
     //------------------------
     //fft for all points on surface point-by-point
@@ -223,8 +226,6 @@ int main(int argc, char *argv[])
         List<complex>(pSampled.size())
     );
 
-    autoPtr<List<complex > > fftOnePoint;
-
     Info << "Calculate interpolation and FFT..." << endl;
 
     forAll(pSampled, pointI)
@@ -238,15 +239,21 @@ int main(int argc, char *argv[])
             pInt[j] = p0 + intWeight[j]*(p[intLower[j]+1] - p0);
         }
 
-        // calculate fft
-        fftOnePoint = fft(pInt, lastTime);
+        std::copy(pInt.cbegin(), pInt.cend(), fftIn);
+
+        fftw_execute(fftPlan);
 
         //write to buffer
         forAll(allComplexPressures, freqI)
         {
-            allComplexPressures[freqI][pointI] = fftOnePoint()[freqI];
+            allComplexPressures[freqI][pointI] =
+                complex(fftOut[freqI][0], fftOut[freqI][1])*ampNorm[freqI];
         }
     }
+
+    fftw_destroy_plan(fftPlan);
+    fftw_free(fftIn);
+    fftw_free(fftOut);
 
     //------------------------
 
